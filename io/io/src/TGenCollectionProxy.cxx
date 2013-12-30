@@ -36,9 +36,9 @@
 #include "TStreamerInfoActions.h"
 #include <stdlib.h>
 
-#define MESSAGE(which,text)
+#include "TInterpreter.h" // For gCINTMutex
 
-std::vector<TVirtualCollectionProxy*> gSlowIterator__Proxy;
+#define MESSAGE(which,text)
 
 //////////////////////////////////////////////////////////////////////////
 //                                                                      //
@@ -771,7 +771,7 @@ static TGenCollectionProxy::Value *R__CreateValue(const std::string &name, Bool_
 TGenCollectionProxy *TGenCollectionProxy::InitializeEx(Bool_t silent)
 {
    // Proxy initializer
-   R__LOCKGUARD2(gCollectionMutex);
+   R__LOCKGUARD2(gCINTMutex);
    if (fValue) return this;
 
    TClass *cl = fClass ? fClass.GetClass() : TClass::GetClass(fTypeinfo,kTRUE,silent);
@@ -1119,8 +1119,6 @@ void TGenCollectionProxy::PushProxy(void *objstart)
 {
    // Add an object.
 
-   gSlowIterator__Proxy.push_back(this);
-
    if ( !fValue ) Initialize(kFALSE);
    if ( !fProxyList.empty() ) {
       EnvironBase_t* back = fProxyList.back();
@@ -1156,8 +1154,6 @@ void TGenCollectionProxy::PopProxy()
 {
    // Remove the last object.
 
-   gSlowIterator__Proxy.pop_back();
-   
    if ( !fProxyList.empty() ) {
       EnvironBase_t* e = fProxyList.back();
       if ( --e->fRefCount <= 0 ) {
@@ -1275,10 +1271,10 @@ struct TGenCollectionProxy__SlowIterator {
 };
 
 //______________________________________________________________________________
-void TGenCollectionProxy__SlowCreateIterators(void * /* collection */, void **begin_arena, void **end_arena) 
+void TGenCollectionProxy__SlowCreateIterators(void * /* collection */, void **begin_arena, void **end_arena, TVirtualCollectionProxy *proxy)
 {
-   new (*begin_arena) TGenCollectionProxy__SlowIterator(gSlowIterator__Proxy.back());
-   *(UInt_t*)*end_arena = gSlowIterator__Proxy.back()->Size();
+   new (*begin_arena) TGenCollectionProxy__SlowIterator(proxy);
+   *(UInt_t*)*end_arena = proxy->Size();
 }
 
 //______________________________________________________________________________
@@ -1315,7 +1311,7 @@ void TGenCollectionProxy__SlowDeleteTwoIterators(void *, void *)
 
 
 //______________________________________________________________________________
-void TGenCollectionProxy__VectorCreateIterators(void *obj, void **begin_arena, void **end_arena) 
+void TGenCollectionProxy__VectorCreateIterators(void *obj, void **begin_arena, void **end_arena, TVirtualCollectionProxy*)
 {
    // We can safely assume that the std::vector layout does not really depend on
    // the content!
@@ -1333,10 +1329,6 @@ void TGenCollectionProxy__VectorCreateIterators(void *obj, void **begin_arena, v
    *end_arena = &(*vec->end());
 #endif
    
-   // The following is a safer way but require the caller to have called TPushPop
-   //   TVirtualCollectionProxy *proxy = gSlowIterator__Proxy.back();
-   //   void *good_begin_arena = proxy->At(0);
-   //   void *good_end_arena = ((char*)proxy->At(0)) + proxy->Size() * proxy->GetIncrement();
 }
 
 //______________________________________________________________________________
@@ -1369,7 +1361,7 @@ void TGenCollectionProxy__VectorDeleteTwoIterators(void *, void *)
 
 
 //______________________________________________________________________________
-void TGenCollectionProxy__StagingCreateIterators(void *obj, void **begin_arena, void **end_arena) 
+void TGenCollectionProxy__StagingCreateIterators(void *obj, void **begin_arena, void **end_arena, TVirtualCollectionProxy *)
 {
    TGenCollectionProxy::TStaging * s = (TGenCollectionProxy::TStaging*)obj;
    *begin_arena = s->GetContent();
