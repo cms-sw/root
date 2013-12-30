@@ -514,7 +514,7 @@ inline Int_t TMath::IsNaN(Double_t x)
    { return std::isnan(x); }
 #endif
 #else
-   { return isnan(x); }
+   { return ::isnan(x); }
 #endif
 
 //--------wrapper to numeric_limits
