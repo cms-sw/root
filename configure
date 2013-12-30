@@ -2336,7 +2336,7 @@ fi
 usecxx11="undef"
 if test "x$enable_cxx11" = "xyes"; then
     message "Checking whether c++11 mode is supported"
-    check_cxxopt -std=c++11
+    check_cxxopt -std=c++0x
     if test $cxxopt_result -eq 0 ; then
         enable_cxx11="no"
 	result "no"
