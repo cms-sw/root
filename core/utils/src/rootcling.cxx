@@ -5586,7 +5586,11 @@ int GenReflex(int argc, char **argv)
       writeEmptyRootPCM = true;
 
    // Add the .so extension to the rootmap lib if not there
-   if (!rootmapLibName.empty() && !ROOT::TMetaUtils::EndsWith(rootmapLibName, gLibraryExtension)) {
+   if (!rootmapLibName.empty() && !ROOT::TMetaUtils::EndsWith(rootmapLibName, gLibraryExtension)
+#ifdef __APPLE__
+                               && !ROOT::TMetaUtils::EndsWith(rootmapLibName, ".dylib")
+#endif
+   ) {
       rootmapLibName += gLibraryExtension;
    }
 
