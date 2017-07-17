@@ -524,7 +524,7 @@ Int_t TBasket::ReadBasketBuffers(Long64_t pos, Int_t len, TFile *file)
          st = pf->ReadBuffer(readBufferRef->Buffer(),pos,len);
       }
       if (st < 0) {
-         return 1;
+         return 2;
       } else if (st == 0) {
          // Read directly from file, not from the cache
          // If we are using a TTreeCache, disable reading from the default cache
@@ -537,7 +537,7 @@ Int_t TBasket::ReadBasketBuffers(Long64_t pos, Int_t len, TFile *file)
          pf->AddNoCacheBytesRead(len);
          pf->AddNoCacheReadCalls(1);
          if (ret) {
-            return 1;
+            return 3;
          }
       }
       gPerfStats = temp;
@@ -548,13 +548,13 @@ Int_t TBasket::ReadBasketBuffers(Long64_t pos, Int_t len, TFile *file)
       R__LOCKGUARD_IMT(gROOTMutex);  // Lock for parallel TTree I/O
       if (file->ReadBuffer(readBufferRef->Buffer(),pos,len)) {
          gPerfStats = temp;
-         return 1;
+         return 4;
       }
       else gPerfStats = temp;
    }
    Streamer(*readBufferRef);
    if (IsZombie()) {
-      return 1;
+      return 5;
    }
 
    rawCompressedBuffer = readBufferRef->Buffer();
@@ -617,6 +617,7 @@ Int_t TBasket::ReadBasketBuffers(Long64_t pos, Int_t len, TFile *file)
    // Case where ROOT thinks the buffer is compressed.  Copy over the key and uncompress the object
    if (fObjlen > fNbytes-fKeylen || oldCase) {
       if (R__unlikely(TestBit(TBufferFile::kNotDecompressed) && (fNevBuf==1))) {
+         //always returns 0
          return ReadBasketBuffersUncompressedCase();
       }
 
@@ -658,7 +659,7 @@ Int_t TBasket::ReadBasketBuffers(Long64_t pos, Int_t len, TFile *file)
       if (R__unlikely(noutot != fObjlen)) {
          Error("ReadBasketBuffers", "fNbytes = %d, fKeylen = %d, fObjlen = %d, noutot = %d, nout=%d, nin=%d, nbuf=%d", fNbytes,fKeylen,fObjlen, noutot,nout,nin,nbuf);
          fBranch->GetTree()->IncrementTotalBuffers(fBufferSize);
-         return 1;
+         return 6;
       }
       len = fObjlen+fKeylen;
       TVirtualPerfStats* temp = gPerfStats;
