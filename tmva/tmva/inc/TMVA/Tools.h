@@ -268,7 +268,7 @@ namespace TMVA {
       const char* GetName     ( void* node );
 
       TXMLEngine& xmlengine() { return *fXMLEngine; }
-      int xmlenginebuffersize() { return 10000000; }
+      int xmlenginebuffersize() { return 20000000; }
       TXMLEngine* fXMLEngine;
 
       TH1*       GetCumulativeDist( TH1* h);
