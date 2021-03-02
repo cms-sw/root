@@ -11,6 +11,7 @@
 
 /** \class TTreeCache
 \ingroup tree
+\brief A cache to speed-up the reading of ROOT datasets
 
 # A cache to speed-up the reading of ROOT datasets
 
@@ -1124,7 +1125,8 @@ Bool_t TTreeCache::FillBuffer()
          }
       }
       if (fIsLearning) { //  Learning mode
-         entry = 0;
+         // The learning phase should start from the minimum entry in the cache
+         entry = fEntryMin;
       }
       if (fFirstTime) {
          //try to detect if it is normal or reverse read
@@ -1249,9 +1251,10 @@ Bool_t TTreeCache::FillBuffer()
       return kFALSE;
    }
 
+   // If there is overlap between the found cluster and the authorized range
+   // update the cache data members with the information about the current cluster.
    fEntryCurrent = entryCurrent;
    fEntryNext = entryNext;
-
 
    auto firstClusterEnd = fEntryNext;
    if (showMore || gDebug > 6)
@@ -2017,6 +2020,19 @@ Int_t TTreeCache::ReadBuffer(char *buf, Long64_t pos, Int_t len)
 
 void TTreeCache::ResetCache()
 {
+   for (Int_t i = 0; i < fNbranches; ++i) {
+      TBranch *b = (TBranch*)fBranches->UncheckedAt(i);
+      if (b->GetDirectory()==0 || b->TestBit(TBranch::kDoNotProcess))
+         continue;
+      if (b->GetDirectory()->GetFile() != fFile)
+         continue;
+      b->fCacheInfo.Reset();
+   }
+   fEntryCurrent = -1;
+   fEntryNext = -1;
+   fCurrentClusterStart = -1;
+   fNextClusterStart = -1;
+
    TFileCacheRead::Prefetch(0,0);
 
    if (fEnablePrefetching) {

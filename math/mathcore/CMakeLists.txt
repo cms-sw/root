@@ -1,3 +1,9 @@
+# Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.
+# All rights reserved.
+#
+# For the licensing terms see $ROOTSYS/LICENSE.
+# For the list of contributors see $ROOTSYS/README/CREDITS.
+
 ############################################################################
 # CMakeLists.txt file for building ROOT math/mathcore package
 ############################################################################
@@ -62,14 +68,12 @@ set(HEADERS
   Math/MultiDimParamFunctionAdapter.h
   Math/OneDimFunctionAdapter.h
   Math/ParamFunctor.h
-  Math/PdfFunc.h
   Math/PdfFuncMathCore.h
-  Math/ProbFunc.h
   Math/ProbFuncMathCore.h
-  Math/QuantFunc.h
   Math/QuantFuncMathCore.h
   Math/Random.h
   Math/RandomFunctions.h
+  Math/RanluxppEngine.h
   Math/RichardsonDerivator.h
   Math/RootFinder.h
   Math/SpecFuncMathCore.h
@@ -92,6 +96,7 @@ set(HEADERS
   TRandom3.h
   TRandomGen.h
   TStatistic.h
+  VectorizedTMath.h
 )
 
 if(runtime_cxxmodules)
@@ -100,6 +105,10 @@ if(runtime_cxxmodules)
   # 'abs' shadow declaration (from stl math.h) is broken.
   # FIXME: Revise after a llvm upgrade or reproduce it outside rootcling.
   list(REMOVE_ITEM HEADERS "Math/Math.h")
+
+  if(veccore)
+    set(dictoptions "-mByproduct" "Vc")
+  endif(veccore)
 endif()
 
 ROOT_ADD_C_FLAG(_flags -Wno-strict-overflow)  # Avoid what it seems a compiler false positive warning
@@ -156,6 +165,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(MathCore
     src/ProbFuncMathCore.cxx
     src/QuantFuncMathCore.cxx
     src/RandomFunctions.cxx
+    src/RanluxppEngineImpl.cxx
     src/RichardsonDerivator.cxx
     src/RootFinder.cxx
     src/SparseData.cxx
@@ -176,10 +186,12 @@ ROOT_STANDARD_LIBRARY_PACKAGE(MathCore
     src/TStatistic.cxx
     src/UnBinData.cxx
     src/triangle.c
+    src/VectorizedTMath.cxx
   LIBRARIES
     ${MATHCORE_LIBRARIES}
   DICTIONARY_OPTIONS
     -writeEmptyRootPCM
+    ${dictoptions}
   DEPENDENCIES
     Core
     ${MATHCORE_DEPENDENCIES}
@@ -187,7 +199,17 @@ ROOT_STANDARD_LIBRARY_PACKAGE(MathCore
     ${MATHCORE_BUILTINS}
 )
 
+target_include_directories(MathCore PRIVATE ${Vc_INCLUDE_DIR})
+target_include_directories(MathCore PRIVATE ${VecCore_INCLUDE_DIRS})
+
+list(APPEND math_incl ${Vc_INCLUDE_DIR})
+list(APPEND math_incl ${VecCore_INCLUDE_DIRS})
+
+foreach(incl ${math_incl})
+   target_include_directories(MathCore PUBLIC $<BUILD_INTERFACE:${incl}>)
+endforeach()
+
 target_compile_definitions(MathCore INTERFACE ${VecCore_DEFINITIONS})
-target_link_libraries(MathCore PUBLIC ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(MathCore PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 
 ROOT_ADD_TEST_SUBDIRECTORY(test)

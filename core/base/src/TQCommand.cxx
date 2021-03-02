@@ -101,7 +101,6 @@ Use TQUndoManager::Undo to undo commands in  history list.
 Redo is Undo for undo action. Use TQUndoManager::Redo method for that
 */
 
-#include "Varargs.h"
 #include "TQCommand.h"
 #include "TQConnection.h"
 #include "TDataType.h"
@@ -252,8 +251,8 @@ TQCommand::~TQCommand()
    if (fRedo != fUndo) delete fUndo;
 
    delete fRedo;
-   delete fRedoArgs;
-   delete fUndoArgs;
+   delete [] fRedoArgs;
+   delete [] fUndoArgs;
 
    Delete();
 }

@@ -1,8 +1,8 @@
-// @(#)root/eve:$Id$
+// @(#)root/eve7:$Id$
 // Authors: Matevz Tadel & Alja Mrak-Tadel: 2006, 2007
 
 /*************************************************************************
- * Copyright (C) 1995-2007, Rene Brun and Fons Rademakers.               *
+ * Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
@@ -12,29 +12,20 @@
 #include <ROOT/REveTrack.hxx>
 #include <ROOT/REveTrackPropagator.hxx>
 #include <ROOT/REvePointSet.hxx>
-
-#include "TParticle.h"
-#include "TPolyLine3D.h"
-#include "TMarker.h"
-#include "TPolyMarker3D.h"
-#include "TColor.h"
-#include "TParticlePDG.h"
-
-// Updates
 #include <ROOT/REveManager.hxx>
 #include <ROOT/REveTrackProjected.hxx>
 
-#include "Riostream.h"
+#include "TParticle.h"
+#include "TParticlePDG.h"
+#include "TClass.h"
 
+#include <iostream>
 #include <vector>
 #include <algorithm>
 #include <functional>
 
-#include "json.hpp"
-
 
 using namespace ROOT::Experimental;
-namespace REX = ROOT::Experimental;
 
 /** \class REveTrack
 \ingroup REve
@@ -101,7 +92,6 @@ REveTrack::REveTrack(TParticle *t, Int_t label, REveTrackPropagator *prop):
    SetName(t->GetName());
 }
 
-/*
 ////////////////////////////////////////////////////////////////////////////////
 
 REveTrack::REveTrack(REveMCTrack* t, REveTrackPropagator* prop):
@@ -158,8 +148,6 @@ REveTrack::REveTrack(REveRecTrackD* t, REveTrackPropagator* prop) :
 {
    SetPropagator(prop);
    fMainColorPtr = &fLineColor;
-
-   SetName(t->GetName());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -187,10 +175,7 @@ REveTrack::REveTrack(REveRecTrack* t, REveTrackPropagator* prop) :
 {
    SetPropagator(prop);
    fMainColorPtr = &fLineColor;
-
-   SetName(t->GetName());
 }
-*/
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Copy constructor. Track parameters are copied but the
@@ -199,7 +184,7 @@ REveTrack::REveTrack(REveRecTrack* t, REveTrackPropagator* prop) :
 /// If points of 't' are locked, they are cloned.
 
 REveTrack::REveTrack(const REveTrack& t) :
-   REveLine(),
+   REveLine(t),
    fV(t.fV),
    fP(t.fP),
    fPEnd(),
@@ -237,18 +222,18 @@ REveTrack::~REveTrack()
 
 void REveTrack::ComputeBBox()
 {
-   if (Size() > 0 || ! fPathMarks.empty())
+   if (fSize > 0 || ! fPathMarks.empty())
    {
       BBoxInit();
-      Int_t    n = Size();
-      Float_t* p = TPolyMarker3D::fP;
+      Int_t    n = fSize;
+      Float_t *p = & fPoints[0].fX;
       for (Int_t i = 0; i < n; ++i, p += 3)
       {
          BBoxCheckPoint(p);
       }
-      for (vPathMark_ci i = fPathMarks.begin(); i != fPathMarks.end(); ++i)
+      for (const auto &pm: fPathMarks)
       {
-         BBoxCheckPoint(i->fV.fX, i->fV.fY,i->fV.fZ);
+         BBoxCheckPoint(pm.fV.fX, pm.fV.fY, pm.fV.fZ);
       }
    }
    else
@@ -300,7 +285,7 @@ void REveTrack::SetPathMarks(const REveTrack& t)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Set track's render style.
+/// Set track's propagator.
 /// Reference counts of old and new propagator are updated.
 
 void REveTrack::SetPropagator(REveTrackPropagator *prop)
@@ -339,7 +324,7 @@ void REveTrack::MakeTrack(Bool_t recurse)
       Reset(0);
       fLastPMIdx = 0;
 
-      REveTrackPropagator& rTP((fPropagator != 0) ? *fPropagator : REveTrackPropagator::fgDefault);
+      REveTrackPropagator& rTP((fPropagator != nullptr) ? *fPropagator : REveTrackPropagator::fgDefault);
 
       const Double_t maxRsq = rTP.GetMaxR() * rTP.GetMaxR();
       const Double_t maxZ   = rTP.GetMaxZ();
@@ -349,7 +334,7 @@ void REveTrack::MakeTrack(Bool_t recurse)
          REveVectorD currP = fP;
          Bool_t decay = kFALSE;
          rTP.InitTrack(fV, fCharge);
-         for (vPathMark_i pm = fPathMarks.begin(); pm != fPathMarks.end(); ++pm, ++fLastPMIdx)
+         for (auto pm = fPathMarks.begin(); pm != fPathMarks.end(); ++pm, ++fLastPMIdx)
          {
             Int_t start_point = rTP.GetCurrentPoint();
 
@@ -458,9 +443,8 @@ void REveTrack::MakeTrack(Bool_t recurse)
 
    if (recurse)
    {
-      for (List_i i=fChildren.begin(); i!=fChildren.end(); ++i)
-      {
-         REveTrack* t = dynamic_cast<REveTrack*>(*i);
+      for (auto &c: fChildren) {
+         REveTrack* t = dynamic_cast<REveTrack *>(c);
          if (t) t->MakeTrack(recurse);
       }
    }
@@ -495,7 +479,7 @@ void REveTrack::WriteVizParams(std::ostream& out, const TString& var)
 
 TClass* REveTrack::ProjectedClass(const REveProjection*) const
 {
-   return REveTrackProjected::Class();
+   return TClass::GetClass<REveTrackProjected>();
 }
 
 namespace
@@ -523,26 +507,26 @@ void REveTrack::PrintPathMarks()
    static const REveException eh("REveTrack::PrintPathMarks ");
 
    printf("REveTrack '%s', number of path marks %d, label %d\n",
-          GetName(), (Int_t)fPathMarks.size(), fLabel);
+          GetCName(), (Int_t)fPathMarks.size(), fLabel);
 
-   for (vPathMark_i pm = fPathMarks.begin(); pm != fPathMarks.end(); ++pm)
+   for (auto &pm: fPathMarks)
    {
       printf("  %-9s  p: %8f %8f %8f Vertex: %8e %8e %8e %g Extra:%8f %8f %8f\n",
-             pm->TypeName(),
-             pm->fP.fX,  pm->fP.fY, pm->fP.fZ,
-             pm->fV.fX,  pm->fV.fY, pm->fV.fZ,
-             pm->fE.fX,  pm->fE.fY, pm->fE.fZ,
-             pm->fTime);
+             pm.TypeName(),
+             pm.fP.fX,  pm.fP.fY, pm.fP.fZ,
+             pm.fV.fX,  pm.fV.fY, pm.fV.fZ,
+             pm.fE.fX,  pm.fE.fY, pm.fE.fZ,
+             pm.fTime);
    }
 }
 
-//------------------------------------------------------------------------------
+////////////////////////////////////////////////////////////////////////////////
+/// Fill core part of JSON representation.
 
 Int_t REveTrack::WriteCoreJson(nlohmann::json &j, Int_t rnr_offset)
 {
    // TODO: missing streaming of fitting points
-   Int_t ret = REveLine::WriteCoreJson(j, rnr_offset);
-   return ret;
+   return REveLine::WriteCoreJson(j, rnr_offset);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -577,7 +561,7 @@ selection based on track parameters.
 /// one is created.
 
 REveTrackList::REveTrackList(REveTrackPropagator* prop) :
-   REveElementList(),
+   REveElement(),
    TAttMarker(1, 20, 1),
    TAttLine(1,1,1),
 
@@ -590,11 +574,11 @@ REveTrackList::REveTrackList(REveTrackPropagator* prop) :
    fMinP  (0), fMaxP  (0), fLimP  (0)
 {
 
-   fChildClass = REveTrack::Class(); // override member from base REveElementList
+   fChildClass = TClass::GetClass<REveTrack>(); // override member from base REveElementList
 
    fMainColorPtr = &fLineColor;
 
-   if (prop == 0) prop = new REveTrackPropagator;
+   if (!prop) prop = new REveTrackPropagator;
    SetPropagator(prop);
 }
 
@@ -602,8 +586,8 @@ REveTrackList::REveTrackList(REveTrackPropagator* prop) :
 /// Constructor. If track-propagator argument is 0, a new default
 /// one is created.
 
-REveTrackList::REveTrackList(const char* name, REveTrackPropagator* prop) :
-   REveElementList(name),
+REveTrackList::REveTrackList(const std::string& name, REveTrackPropagator* prop) :
+   REveElement(name),
    TAttMarker(1, 20, 1),
    TAttLine(1,1,1),
 
@@ -615,11 +599,11 @@ REveTrackList::REveTrackList(const char* name, REveTrackPropagator* prop) :
    fMinPt (0), fMaxPt (0), fLimPt (0),
    fMinP  (0), fMaxP  (0), fLimP  (0)
 {
-   fChildClass = REveTrack::Class(); // override member from base REveElementList
+   fChildClass = TClass::GetClass<REveTrack>(); // override member from base REveElementList
 
    fMainColorPtr = &fLineColor;
 
-   if (prop == 0) prop = new REveTrackPropagator;
+   if (!prop) prop = new REveTrackPropagator;
    SetPropagator(prop);
 }
 
@@ -652,18 +636,16 @@ void REveTrackList::MakeTracks(Bool_t recurse)
 {
    fLimPt = fLimP = 0;
 
-   for (List_i i=fChildren.begin(); i!=fChildren.end(); ++i)
-   {
-      REveTrack* track = dynamic_cast<REveTrack*>(*i);
-      if (track)
-      {
+   for (auto &c: fChildren) {
+      REveTrack* track = dynamic_cast<REveTrack*>(c);
+      if (track) {
          track->MakeTrack(recurse);
 
          fLimPt = TMath::Max(fLimPt, track->fP.Perp());
          fLimP  = TMath::Max(fLimP,  track->fP.Mag());
       }
       if (recurse)
-         FindMomentumLimits(*i, recurse);
+         FindMomentumLimits(c, recurse);
    }
 
    fLimPt = RoundMomentumLimit(fLimPt);
@@ -682,16 +664,16 @@ void REveTrackList::FindMomentumLimits(Bool_t recurse)
 
    if (HasChildren())
    {
-      for (List_i i=BeginChildren(); i!=EndChildren(); ++i)
+      for (auto &c: RefChildren())
       {
-         REveTrack* track = dynamic_cast<REveTrack*>(*i);
+         REveTrack* track = dynamic_cast<REveTrack *>(c);
          if (track)
          {
             fLimPt = TMath::Max(fLimPt, track->fP.Perp());
             fLimP  = TMath::Max(fLimP,  track->fP.Mag());
          }
          if (recurse)
-            FindMomentumLimits(*i, recurse);
+            FindMomentumLimits(c, recurse);
       }
 
       fLimPt = RoundMomentumLimit(fLimPt);
@@ -705,18 +687,16 @@ void REveTrackList::FindMomentumLimits(Bool_t recurse)
 /// Loop over track elements of argument el and find highest pT and p.
 /// These are stored in members fLimPt and fLimP.
 
-void REveTrackList::FindMomentumLimits(REveElement* el, Bool_t recurse)
+void REveTrackList::FindMomentumLimits(REveElement *el, Bool_t recurse)
 {
-   for (List_i i=el->BeginChildren(); i!=el->EndChildren(); ++i)
-   {
-      REveTrack* track = dynamic_cast<REveTrack*>(*i);
-      if (track)
-      {
+   for (auto &c: el->RefChildren()) {
+      auto track = dynamic_cast<REveTrack *>(c);
+      if (track) {
          fLimPt = TMath::Max(fLimPt, track->fP.Perp());
          fLimP  = TMath::Max(fLimP,  track->fP.Mag());
       }
       if (recurse)
-         FindMomentumLimits(*i, recurse);
+         FindMomentumLimits(c, recurse);
    }
 }
 
@@ -738,12 +718,10 @@ Double_t REveTrackList::RoundMomentumLimit(Double_t x)
 
 void REveTrackList::SanitizeMinMaxCuts()
 {
-   using namespace TMath;
-
-   fMinPt = Min(fMinPt, fLimPt);
-   fMaxPt = fMaxPt == 0 ? fLimPt : Min(fMaxPt, fLimPt);
-   fMinP  = Min(fMinP,  fLimP);
-   fMaxP  = fMaxP  == 0 ? fLimP  : Min(fMaxP,  fLimP);
+   fMinPt = TMath::Min(fMinPt, fLimPt);
+   fMaxPt = (fMaxPt == 0) ? fLimPt : TMath::Min(fMaxPt, fLimPt);
+   fMinP  = TMath::Min(fMinP,  fLimP);
+   fMaxP  = (fMaxP  == 0) ? fLimP  : TMath::Min(fMaxP,  fLimP);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -751,13 +729,12 @@ void REveTrackList::SanitizeMinMaxCuts()
 
 void REveTrackList::SetRnrLine(Bool_t rnr)
 {
-   for (List_i i=BeginChildren(); i!=EndChildren(); ++i)
-   {
-      REveTrack* track = (REveTrack*)(*i);
+   for (auto &c: RefChildren()) {
+      auto track = (REveTrack *)(c);
       if (track->GetRnrLine() == fRnrLine)
          track->SetRnrLine(rnr);
       if (fRecurse)
-         SetRnrLine(rnr, *i);
+         SetRnrLine(rnr, c);
    }
    fRnrLine = rnr;
 }
@@ -767,14 +744,12 @@ void REveTrackList::SetRnrLine(Bool_t rnr)
 
 void REveTrackList::SetRnrLine(Bool_t rnr, REveElement* el)
 {
-   REveTrack* track;
-   for (List_i i=el->BeginChildren(); i!=el->EndChildren(); ++i)
-   {
-      track = dynamic_cast<REveTrack*>(*i);
+   for (auto &c: el->RefChildren()) {
+      auto track = dynamic_cast<REveTrack *>(c);
       if (track && (track->GetRnrLine() == fRnrLine))
          track->SetRnrLine(rnr);
       if (fRecurse)
-         SetRnrLine(rnr, *i);
+         SetRnrLine(rnr, c);
    }
 }
 
@@ -783,13 +758,12 @@ void REveTrackList::SetRnrLine(Bool_t rnr, REveElement* el)
 
 void REveTrackList::SetRnrPoints(Bool_t rnr)
 {
-   for (List_i i=BeginChildren(); i!=EndChildren(); ++i)
-   {
-      REveTrack* track = (REveTrack*)(*i);
+   for (auto &c: RefChildren()) {
+      auto track = (REveTrack *)(c);
       if (track->GetRnrPoints() == fRnrPoints)
          track->SetRnrPoints(rnr);
       if (fRecurse)
-         SetRnrPoints(rnr, *i);
+         SetRnrPoints(rnr, c);
    }
    fRnrPoints = rnr;
 }
@@ -799,15 +773,13 @@ void REveTrackList::SetRnrPoints(Bool_t rnr)
 
 void REveTrackList::SetRnrPoints(Bool_t rnr, REveElement* el)
 {
-   REveTrack* track;
-   for (List_i i=el->BeginChildren(); i!=el->EndChildren(); ++i)
-   {
-      track = dynamic_cast<REveTrack*>(*i);
+   for (auto &c: el->RefChildren()) {
+      auto track = dynamic_cast<REveTrack *>(c);
       if (track)
          if (track->GetRnrPoints() == fRnrPoints)
             track->SetRnrPoints(rnr);
       if (fRecurse)
-         SetRnrPoints(rnr, *i);
+         SetRnrPoints(rnr, c);
    }
 }
 
@@ -816,13 +788,12 @@ void REveTrackList::SetRnrPoints(Bool_t rnr, REveElement* el)
 
 void REveTrackList::SetMainColor(Color_t col)
 {
-   for (List_i i=BeginChildren(); i!=EndChildren(); ++i)
-   {
-      REveTrack* track = (REveTrack*)(*i);
+   for (auto &c: RefChildren()) {
+      auto track = (REveTrack *)(c);
       if (track->GetLineColor() == fLineColor)
          track->SetLineColor(col);
       if (fRecurse)
-         SetLineColor(col, *i);
+         SetLineColor(col, c);
    }
    REveElement::SetMainColor(col);
 }
@@ -832,14 +803,12 @@ void REveTrackList::SetMainColor(Color_t col)
 
 void REveTrackList::SetLineColor(Color_t col, REveElement* el)
 {
-   REveTrack* track;
-   for (List_i i=el->BeginChildren(); i!=el->EndChildren(); ++i)
-   {
-      track = dynamic_cast<REveTrack*>(*i);
+   for (auto &c: el->RefChildren()) {
+      auto track = dynamic_cast<REveTrack *>(c);
       if (track && track->GetLineColor() == fLineColor)
          track->SetLineColor(col);
       if (fRecurse)
-         SetLineColor(col, *i);
+         SetLineColor(col, c);
    }
 }
 
@@ -848,13 +817,12 @@ void REveTrackList::SetLineColor(Color_t col, REveElement* el)
 
 void REveTrackList::SetLineWidth(Width_t width)
 {
-   for (List_i i=BeginChildren(); i!=EndChildren(); ++i)
-   {
-      REveTrack* track = (REveTrack*)(*i);
+   for (auto &c: RefChildren()) {
+      auto track = (REveTrack *)(c);
       if (track->GetLineWidth() == fLineWidth)
          track->SetLineWidth(width);
       if (fRecurse)
-         SetLineWidth(width, *i);
+         SetLineWidth(width, c);
    }
    fLineWidth = width;
 }
@@ -864,14 +832,12 @@ void REveTrackList::SetLineWidth(Width_t width)
 
 void REveTrackList::SetLineWidth(Width_t width, REveElement* el)
 {
-   REveTrack* track;
-   for (List_i i=el->BeginChildren(); i!=el->EndChildren(); ++i)
-   {
-      track = dynamic_cast<REveTrack*>(*i);
+   for (auto &c: el->RefChildren()) {
+      auto track = dynamic_cast<REveTrack *>(c);
       if (track && track->GetLineWidth() == fLineWidth)
          track->SetLineWidth(width);
       if (fRecurse)
-         SetLineWidth(width, *i);
+         SetLineWidth(width, c);
    }
 }
 
@@ -880,13 +846,12 @@ void REveTrackList::SetLineWidth(Width_t width, REveElement* el)
 
 void REveTrackList::SetLineStyle(Style_t style)
 {
-   for (List_i i=BeginChildren(); i!=EndChildren(); ++i)
-   {
-      REveTrack* track = (REveTrack*)(*i);
+   for (auto &c: RefChildren()) {
+      auto track = (REveTrack *)(c);
       if (track->GetLineStyle() == fLineStyle)
          track->SetLineStyle(style);
       if (fRecurse)
-         SetLineStyle(style, *i);
+         SetLineStyle(style, c);
    }
    fLineStyle = style;
 }
@@ -896,14 +861,12 @@ void REveTrackList::SetLineStyle(Style_t style)
 
 void REveTrackList::SetLineStyle(Style_t style, REveElement* el)
 {
-   REveTrack* track;
-   for (List_i i=el->BeginChildren(); i!=el->EndChildren(); ++i)
-   {
-      track = dynamic_cast<REveTrack*>(*i);
+   for (auto &c: el->RefChildren()) {
+      auto track = dynamic_cast<REveTrack *>(c);
       if (track && track->GetLineStyle() == fLineStyle)
          track->SetLineStyle(style);
       if (fRecurse)
-         SetLineStyle(style, *i);
+         SetLineStyle(style, c);
    }
 }
 
@@ -912,13 +875,12 @@ void REveTrackList::SetLineStyle(Style_t style, REveElement* el)
 
 void REveTrackList::SetMarkerStyle(Style_t style)
 {
-   for (List_i i=BeginChildren(); i!=EndChildren(); ++i)
-   {
-      REveTrack* track = (REveTrack*)(*i);
+   for (auto &c: RefChildren()) {
+      auto track = (REveTrack *)(c);
       if (track->GetMarkerStyle() == fMarkerStyle)
          track->SetMarkerStyle(style);
       if (fRecurse)
-         SetMarkerStyle(style, *i);
+         SetMarkerStyle(style, c);
    }
    fMarkerStyle = style;
 }
@@ -928,14 +890,12 @@ void REveTrackList::SetMarkerStyle(Style_t style)
 
 void REveTrackList::SetMarkerStyle(Style_t style, REveElement* el)
 {
-   REveTrack* track;
-   for (List_i i=el->BeginChildren(); i!=el->EndChildren(); ++i)
-   {
-      track = dynamic_cast<REveTrack*>(*i);
+   for (auto &c: el->RefChildren()) {
+      auto track = dynamic_cast<REveTrack *>(c);
       if (track && track->GetMarkerStyle() == fMarkerStyle)
          track->SetMarkerStyle(style);
       if (fRecurse)
-         SetMarkerStyle(style, *i);
+         SetMarkerStyle(style, c);
    }
 }
 
@@ -944,13 +904,12 @@ void REveTrackList::SetMarkerStyle(Style_t style, REveElement* el)
 
 void REveTrackList::SetMarkerColor(Color_t col)
 {
-   for (List_i i=BeginChildren(); i!=EndChildren(); ++i)
-   {
-      REveTrack* track = (REveTrack*)(*i);
+   for (auto &c: RefChildren()) {
+      auto track = (REveTrack *)(c);
       if (track->GetMarkerColor() == fMarkerColor)
          track->SetMarkerColor(col);
       if (fRecurse)
-         SetMarkerColor(col, *i);
+         SetMarkerColor(col, c);
    }
    fMarkerColor = col;
 }
@@ -960,14 +919,12 @@ void REveTrackList::SetMarkerColor(Color_t col)
 
 void REveTrackList::SetMarkerColor(Color_t col, REveElement* el)
 {
-   REveTrack* track;
-   for (List_i i=el->BeginChildren(); i!=el->EndChildren(); ++i)
-   {
-      track = dynamic_cast<REveTrack*>(*i);
+   for (auto &c: el->RefChildren()) {
+      auto track = dynamic_cast<REveTrack *>(c);
       if (track && track->GetMarkerColor() == fMarkerColor)
          track->SetMarkerColor(col);
       if (fRecurse)
-         SetMarkerColor(col, *i);
+         SetMarkerColor(col, c);
    }
 }
 
@@ -976,13 +933,12 @@ void REveTrackList::SetMarkerColor(Color_t col, REveElement* el)
 
 void REveTrackList::SetMarkerSize(Size_t size)
 {
-   for (List_i i=BeginChildren(); i!=EndChildren(); ++i)
-   {
-      REveTrack* track = (REveTrack*)(*i);
+   for (auto &c: RefChildren()) {
+      auto track = (REveTrack *)(c);
       if (track->GetMarkerSize() == fMarkerSize)
          track->SetMarkerSize(size);
       if (fRecurse)
-         SetMarkerSize(size, *i);
+         SetMarkerSize(size, c);
    }
    fMarkerSize = size;
 }
@@ -992,14 +948,12 @@ void REveTrackList::SetMarkerSize(Size_t size)
 
 void REveTrackList::SetMarkerSize(Size_t size, REveElement* el)
 {
-   REveTrack* track;
-   for (List_i i=el->BeginChildren(); i!=el->EndChildren(); ++i)
-   {
-      track = dynamic_cast<REveTrack*>(*i);
+   for (auto &c: el->RefChildren()) {
+      auto track = dynamic_cast<REveTrack*>(c);
       if (track && track->GetMarkerSize() == fMarkerSize)
          track->SetMarkerSize(size);
       if (fRecurse)
-         SetMarkerSize(size, *i);
+         SetMarkerSize(size, c);
    }
 }
 
@@ -1016,34 +970,31 @@ void REveTrackList::SelectByPt(Double_t min_pt, Double_t max_pt)
    const Double_t minptsq = min_pt*min_pt;
    const Double_t maxptsq = max_pt*max_pt;
 
-   for (List_i i=BeginChildren(); i!=EndChildren(); ++i)
-   {
-      const Double_t ptsq = ((REveTrack*)(*i))->fP.Perp2();
+   for (auto &c: RefChildren()) {
+      const Double_t ptsq = ((REveTrack*)c)->fP.Perp2();
       Bool_t on = ptsq >= minptsq && ptsq <= maxptsq;
-      (*i)->SetRnrState(on);
+      c->SetRnrState(on);
       if (on && fRecurse)
-         SelectByPt(min_pt, max_pt, *i);
+         SelectByPt(min_pt, max_pt, c);
    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Select visibility of el's children tracks by transverse momentum.
 
-void REveTrackList::SelectByPt(Double_t min_pt, Double_t max_pt, REveElement* el)
+void REveTrackList::SelectByPt(Double_t min_pt, Double_t max_pt, REveElement *el)
 {
    const Double_t minptsq = min_pt*min_pt;
    const Double_t maxptsq = max_pt*max_pt;
 
-   for (List_i i=el->BeginChildren(); i!=el->EndChildren(); ++i)
-   {
-      REveTrack* track = dynamic_cast<REveTrack*>(*i);
-      if (track)
-      {
+   for (auto &c: el->RefChildren()) {
+      auto track = (REveTrack *)(c);
+      if (track) {
          const Double_t ptsq = track->fP.Perp2();
          Bool_t on = ptsq >= minptsq && ptsq <= maxptsq;
          track->SetRnrState(on);
          if (on && fRecurse)
-            SelectByPt(min_pt, max_pt, *i);
+            SelectByPt(min_pt, max_pt, c);
       }
    }
 }
@@ -1061,13 +1012,12 @@ void REveTrackList::SelectByP(Double_t min_p, Double_t max_p)
    const Double_t minpsq = min_p*min_p;
    const Double_t maxpsq = max_p*max_p;
 
-   for (List_i i=BeginChildren(); i!=EndChildren(); ++i)
-   {
-      const Double_t psq  = ((REveTrack*)(*i))->fP.Mag2();
+   for (auto &c: RefChildren()) {
+      const Double_t psq  = ((REveTrack*)c)->fP.Mag2();
       Bool_t on = psq >= minpsq && psq <= maxpsq;
-      (*i)->SetRnrState(psq >= minpsq && psq <= maxpsq);
+      c->SetRnrState(psq >= minpsq && psq <= maxpsq);
       if (on && fRecurse)
-         SelectByP(min_p, max_p, *i);
+         SelectByP(min_p, max_p, c);
    }
 }
 
@@ -1079,16 +1029,14 @@ void REveTrackList::SelectByP(Double_t min_p, Double_t max_p, REveElement* el)
    const Double_t minpsq = min_p*min_p;
    const Double_t maxpsq = max_p*max_p;
 
-   for (List_i i=el->BeginChildren(); i!=el->EndChildren(); ++i)
-   {
-      REveTrack* track = dynamic_cast<REveTrack*>(*i);
-      if (track)
-      {
-         const Double_t psq  = ((REveTrack*)(*i))->fP.Mag2();
+   for (auto &c: el->RefChildren()) {
+      auto track = (REveTrack *)(c);
+      if (track) {
+         const Double_t psq  = ((REveTrack*)c)->fP.Mag2();
          Bool_t on = psq >= minpsq && psq <= maxpsq;
          track->SetRnrState(on);
          if (on && fRecurse)
-            SelectByP(min_p, max_p, *i);
+            SelectByP(min_p, max_p, c);
       }
    }
 }
@@ -1096,11 +1044,10 @@ void REveTrackList::SelectByP(Double_t min_p, Double_t max_p, REveElement* el)
 ////////////////////////////////////////////////////////////////////////////////
 /// Find track by label, select it and display it in the editor.
 
-REveTrack* REveTrackList::FindTrackByLabel(Int_t label)
+REveTrack *REveTrackList::FindTrackByLabel(Int_t label)
 {
-   for (List_i i=fChildren.begin(); i!=fChildren.end(); ++i)
-   {
-      if (((REveTrack*)(*i))->GetLabel() == label)
+   for (auto &c: fChildren) {
+      if (((REveTrack*)c)->GetLabel() == label)
       {
          // TGListTree     *lt   = REX::gEve->GetLTEFrame()->GetListTree();
          // TGListTreeItem *mlti = lt->GetSelected();
@@ -1110,10 +1057,10 @@ REveTrack* REveTrackList::FindTrackByLabel(Int_t label)
          // lt->HighlightItem(tlti);
          // lt->SetSelected(tlti);
          // REX::gEve->EditElement(*i);
-         return (REveTrack*) *i;
+         return (REveTrack*) c;
       }
    }
-   return 0;
+   return nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1121,10 +1068,8 @@ REveTrack* REveTrackList::FindTrackByLabel(Int_t label)
 
 REveTrack* REveTrackList::FindTrackByIndex(Int_t index)
 {
-   for (List_i i=fChildren.begin(); i!=fChildren.end(); ++i)
-   {
-      if (((REveTrack*)(*i))->GetIndex() == index)
-      {
+   for (auto &c: fChildren) {
+      if (((REveTrack *)c)->GetIndex() == index) {
          // TGListTree     *lt   = REX::gEve->GetLTEFrame()->GetListTree();
          // TGListTreeItem *mlti = lt->GetSelected();
          // if (mlti->GetUserData() != this)
@@ -1133,10 +1078,10 @@ REveTrack* REveTrackList::FindTrackByIndex(Int_t index)
          // lt->HighlightItem(tlti);
          // lt->SetSelected(tlti);
          // REX::gEve->EditElement(*i);
-         return (REveTrack*) *i;
+         return (REveTrack *) c;
       }
    }
-   return 0;
+   return nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1190,5 +1135,5 @@ void REveTrackList::WriteVizParams(std::ostream& out, const TString& var)
 
 TClass* REveTrackList::ProjectedClass(const REveProjection*) const
 {
-   return REveTrackListProjected::Class();
+   return TClass::GetClass<REveTrackListProjected>();
 }

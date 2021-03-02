@@ -33,14 +33,15 @@
 
 // A tokenizer that converts raw HTML into a linked list of HTML elements.
 
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <ctype.h>
+#include <cstring>
+#include <cstdlib>
+#include <cstdio>
+#include <cctype>
 
 #include "TGHtml.h"
 #include "TGHtmlTokens.h"
-
+#include "strlcpy.h"
+#include "snprintf.h"
 
 //----------------------------------------------------------------------
 
@@ -772,7 +773,7 @@ int TGHtml::Tokenize()
          if (fIPlaintext == 0 || fIPlaintext == Html_TEXTAREA) {
             HtmlTranslateEscapes(tpElem->fZText);
          }
-         pElem->fCount = strlen(tpElem->fZText);
+         pElem->fCount = (Html_16_t) strlen(tpElem->fZText);
          n += i;
          inpCol += i;
 
@@ -1144,7 +1145,7 @@ TGHtmlElement *TGHtml::InsertToken(TGHtmlElement *pToken,
       if (zArgs) {
          // coverity[secure_coding]
          strcpy (((TGHtmlTextElement *)pElem)->fZText, zArgs);
-         pElem->fCount = strlen(zArgs);
+         pElem->fCount = (Html_16_t) strlen(zArgs);
       }
    } else if (!strcmp(zType, "Space")) {
       pElem = new TGHtmlSpaceElement();

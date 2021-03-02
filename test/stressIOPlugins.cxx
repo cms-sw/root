@@ -55,7 +55,8 @@
 //_____________________________batch only_____________________
 #ifndef __CINT__
 
-#include <stdlib.h>
+#include <cstdlib>
+#include <snprintf.h>
 #include <TROOT.h>
 #include <TSystem.h>
 #include <TH1.h>
@@ -88,6 +89,9 @@ void cleanup();
 
 int main(int argc, char **argv)
 {
+   std::string inclRootSys = ("-I" + TROOT::GetRootSys() + "/test").Data();
+   TROOT::AddExtraInterpreterArgs({inclRootSys});
+
    gROOT->SetBatch();
    TApplication theApp("App", &argc, argv);
    const char *proto = 0;

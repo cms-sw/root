@@ -30,12 +30,12 @@
 #include "TGComboBox.h"
 #include "TColor.h"
 #include "TPaveLabel.h"
-#include "TVirtualPad.h"
 #include "TGLabel.h"
+#include "TGSlider.h"
 #include "TGNumberEntry.h"
-#include "TPad.h"
 #include "TCanvas.h"
 #include "TROOT.h"
+#include "snprintf.h"
 
 ClassImp(TAttTextEditor);
 

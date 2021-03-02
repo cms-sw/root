@@ -15,11 +15,13 @@
 #include "TBranchElement.h"
 #include "TBranchRef.h"
 #include "TBranchSTL.h"
+#include "TBranchObject.h"
 #include "TBranchProxyDirector.h"
 #include "TClassEdit.h"
 #include "TFriendElement.h"
 #include "TFriendProxy.h"
 #include "TLeaf.h"
+#include "TList.h"
 #include "TROOT.h"
 #include "TStreamerInfo.h"
 #include "TStreamerElement.h"
@@ -214,13 +216,47 @@ namespace {
                        ARGS&&... args):
          BASE(std::forward<ARGS>(args)...)
       {
-         if (TLeaf* sizeLeaf = treeReader->GetTree()->FindLeaf(leafName)) {
-            fIsUnsigned = sizeLeaf->IsUnsigned();
-            if (fIsUnsigned) {
-               fSizeReader.reset(new TTreeReaderValue<UInt_t>(*treeReader, leafName));
-            } else {
-               fSizeReader.reset(new TTreeReaderValue<Int_t>(*treeReader, leafName));
+         std::string foundLeafName = leafName;
+         TLeaf* sizeLeaf = treeReader->GetTree()->FindLeaf(foundLeafName.c_str());
+
+         if (!sizeLeaf) {
+            // leafName might be "top.currentParent.N". But "N" might really be "top.N"!
+            // Strip parents until we find the leaf.
+            std::string leafNameNoParent = leafName;
+            std::string parent;
+            auto posLastDot = leafNameNoParent.rfind('.');
+            if (posLastDot != leafNameNoParent.npos) {
+               parent = leafNameNoParent.substr(0, posLastDot);
+               leafNameNoParent.erase(0, posLastDot + 1);
             }
+
+            do {
+               if (!sizeLeaf && !parent.empty()) {
+                  auto posLastDotParent = parent.rfind('.');
+                  if (posLastDotParent != parent.npos)
+                     parent = parent.substr(0, posLastDot);
+                  else
+                     parent.clear();
+               }
+
+               foundLeafName = parent;
+               if (!parent.empty())
+                  foundLeafName += ".";
+               foundLeafName += leafNameNoParent;
+               sizeLeaf = treeReader->GetTree()->FindLeaf(foundLeafName.c_str());
+            } while (!sizeLeaf && !parent.empty());
+         }
+
+         if (!sizeLeaf) {
+            Error("TUIntOrIntReader", "Cannot find leaf count for %s or any parent branch!", leafName);
+            return;
+         }
+
+         fIsUnsigned = sizeLeaf->IsUnsigned();
+         if (fIsUnsigned) {
+            fSizeReader.reset(new TTreeReaderValue<UInt_t>(*treeReader, foundLeafName.c_str()));
+         } else {
+            fSizeReader.reset(new TTreeReaderValue<Int_t>(*treeReader, foundLeafName.c_str()));
          }
       }
 
@@ -355,7 +391,7 @@ void ROOT::Internal::TTreeReaderArrayBase::CreateProxy()
       const char* brDataType = "{UNDETERMINED}";
       if (br) {
          TDictionary* dictUnused = 0;
-         brDataType = GetBranchDataType(br, dictUnused);
+         brDataType = GetBranchDataType(br, dictUnused, fDict);
       }
       Error("TTreeReaderArrayBase::CreateProxy()", "The template argument type T of %s accessing branch %s (which contains data of type %s) is not known to ROOT. You will need to create a dictionary for it.",
             GetDerivedTypeName(), fBranchName.Data(), brDataType);
@@ -608,6 +644,13 @@ void ROOT::Internal::TTreeReaderArrayBase::SetImpl(TBranch* branch, TLeaf* myLea
             if (element->GetClass() == TClonesArray::Class()){
                fImpl = std::make_unique<TClonesReader>();
             }
+            else if (branchElement->GetType() == TBranchElement::kSTLMemberNode){
+               fImpl = std::make_unique<TBasicTypeArrayReader>();
+            }
+            else if (branchElement->GetType() == TBranchElement::kClonesMemberNode){
+               // TBasicTypeClonesReader should work for object
+               fImpl = std::make_unique<TBasicTypeClonesReader>(element->GetOffset());
+            }
             else {
                fImpl = std::make_unique<TArrayFixedSizeReader>(element->GetArrayLength());
             }
@@ -646,18 +689,18 @@ void ROOT::Internal::TTreeReaderArrayBase::SetImpl(TBranch* branch, TLeaf* myLea
          }
       }
    } else if (branch->IsA() == TBranch::Class()) {
-      TLeaf *topLeaf = branch->GetLeaf(branch->GetName());
+      auto topLeaf = branch->GetLeaf(branch->GetName());
       if (!topLeaf) {
          Error("TTreeReaderArrayBase::SetImpl", "Failed to get the top leaf from the branch");
          fSetupStatus = kSetupMissingBranch;
          return;
       }
-      Int_t size = 0;
-      TLeaf *sizeLeaf = topLeaf->GetLeafCounter(size);
+      // We could have used GetLeafCounter, but it does not work well with Double32_t and Float16_t: ROOT-10149
+      auto sizeLeaf = topLeaf->GetLeafCount();
       if (fSetupStatus == kSetupInternalError)
          fSetupStatus = kSetupMatch;
       if (!sizeLeaf) {
-         fImpl = std::make_unique<TArrayFixedSizeReader>(size);
+         fImpl = std::make_unique<TArrayFixedSizeReader>(topLeaf->GetLenStatic());
       }
       else {
          fImpl = std::make_unique<TArrayParameterSizeReader>(fTreeReader, sizeLeaf->GetName());
@@ -693,7 +736,7 @@ const char* ROOT::Internal::TTreeReaderArrayBase::GetBranchContentDataType(TBran
                                                                  TString& contentTypeName,
                                                                  TDictionary* &dict)
 {
-   dict = 0;
+   dict = nullptr;
    contentTypeName = "";
    if (branch->IsA() == TBranchElement::Class()) {
       TBranchElement* brElement = (TBranchElement*)branch;
@@ -854,11 +897,16 @@ const char* ROOT::Internal::TTreeReaderArrayBase::GetBranchContentDataType(TBran
       const char* dataTypeName = branch->GetClassName();
       if ((!dataTypeName || !dataTypeName[0])
           && branch->IsA() == TBranch::Class()) {
-         TLeaf *myLeaf = branch->GetLeaf(branch->GetName());
+         auto myLeaf = branch->GetLeaf(branch->GetName());
          if (myLeaf){
-            TDictionary *myDataType = TDictionary::GetDictionary(myLeaf->GetTypeName());
+            auto myDataType = TDictionary::GetDictionary(myLeaf->GetTypeName());
             if (myDataType && myDataType->IsA() == TDataType::Class()){
-               dict = TDataType::GetDataType((EDataType)((TDataType*)myDataType)->GetType());
+               auto typeEnumConstant = EDataType(((TDataType*)myDataType)->GetType());
+               // We need to consider Double32_t and Float16_t as dounle and float respectively
+               // since this is the type the user uses to instantiate the TTreeReaderArray template.
+               if (typeEnumConstant == kDouble32_t) typeEnumConstant = kDouble_t;
+               else if (typeEnumConstant == kFloat16_t) typeEnumConstant = kFloat_t;
+               dict = TDataType::GetDataType(typeEnumConstant);
                contentTypeName = myLeaf->GetTypeName();
                return 0;
             }

@@ -1,12 +1,9 @@
-/// \file ROOT/RWebWindowsManager.hxx
-/// \ingroup WebGui ROOT7
-/// \author Sergey Linev <s.linev@gsi.de>
-/// \date 2017-10-16
-/// \warning This is part of the ROOT 7 prototype! It will change without notice. It might trigger earthquakes. Feedback
-/// is welcome!
+// Author: Sergey Linev <s.linev@gsi.de>
+// Date: 2017-10-16
+// Warning: This is part of the ROOT 7 prototype! It will change without notice. It might trigger earthquakes. Feedback is welcome!
 
 /*************************************************************************
- * Copyright (C) 1995-2018, Rene Brun and Fons Rademakers.               *
+ * Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
@@ -60,12 +57,9 @@ private:
 
    int WaitFor(RWebWindow &win, WebWindowWaitFunc_t check, bool timed = false, double tm = -1);
 
-   static bool IsMainThrd();
-
-   std::string GetUrl(const RWebWindow &win, bool batch_mode, bool remote = false);
+   std::string GetUrl(const RWebWindow &win, bool remote = false);
 
    bool CreateServer(bool with_http = false);
-
 
 public:
    RWebWindowsManager();
@@ -83,6 +77,9 @@ public:
    std::shared_ptr<RWebWindow> CreateWindow();
 
    void Terminate();
+
+   static bool IsMainThrd();
+   static void AssignMainThrd();
 };
 
 } // namespace Experimental

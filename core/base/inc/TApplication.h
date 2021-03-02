@@ -74,8 +74,8 @@ private:
    static Bool_t      fgGraphNeeded;    // True if graphics libs need to be initialized
    static Bool_t      fgGraphInit;      // True if graphics libs initialized
 
-   TApplication(const TApplication&);             // not implemented
-   TApplication& operator=(const TApplication&);  // not implemented
+   TApplication(const TApplication&) = delete;
+   TApplication& operator=(const TApplication&) = delete;
 
 protected:
    TApplication      *fAppRemote;      //Current remote application, if defined
@@ -105,7 +105,8 @@ public:
    virtual void    GetOptions(Int_t *argc, char **argv);
    TSignalHandler *GetSignalHandler() const { return fSigHandler; }
    virtual void    SetEchoMode(Bool_t mode);
-
+   void OpenInBrowser(const TString & url);
+   void OpenReferenceGuideFor(const TString & strippedClass);
    virtual void    HandleException(Int_t sig);
    virtual void    HandleIdleTimer();   //*SIGNAL*
    virtual Bool_t  HandleTermInput() { return kFALSE; }

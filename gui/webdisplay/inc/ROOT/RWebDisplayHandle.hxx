@@ -1,12 +1,9 @@
-/// \file ROOT/RWebDisplayHandle.hxx
-/// \ingroup WebGui ROOT7
-/// \author Sergey Linev <s.linev@gsi.de>
-/// \date 2018-10-17
-/// \warning This is part of the ROOT 7 prototype! It will change without notice. It might trigger earthquakes. Feedback
-/// is welcome!
+// Author: Sergey Linev <s.linev@gsi.de>
+// Date: 2018-10-17
+// Warning: This is part of the ROOT 7 prototype! It will change without notice. It might trigger earthquakes. Feedback is welcome!
 
 /*************************************************************************
- * Copyright (C) 1995-2018, Rene Brun and Fons Rademakers.               *
+ * Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
@@ -16,21 +13,20 @@
 #ifndef ROOT7_RWebDisplayHandle
 #define ROOT7_RWebDisplayHandle
 
+#include <ROOT/RWebDisplayArgs.hxx>
+
 #include <string>
 #include <map>
 #include <memory>
-#include <functional>
-
-#include <ROOT/RWebDisplayArgs.hxx>
-
-#include "TString.h"
-
-class THttpServer;
 
 namespace ROOT {
 namespace Experimental {
 
 class RWebDisplayHandle {
+
+   std::string fUrl; ///!< URL used to launch display
+
+   std::string fContent; ///!< page content
 
 protected:
    class Creator {
@@ -48,7 +44,8 @@ protected:
 
       void TestProg(const std::string &nexttry, bool check_std_paths = false);
 
-      virtual std::string MakeProfile(TString &, bool) { return ""; }
+      virtual void ProcessGeometry(std::string &, const RWebDisplayArgs &) {}
+      virtual std::string MakeProfile(std::string &, bool) { return ""; }
 
    public:
 
@@ -64,6 +61,8 @@ protected:
       ChromeCreator();
       virtual ~ChromeCreator() = default;
       bool IsActive() const override { return !fProg.empty(); }
+      void ProcessGeometry(std::string &, const RWebDisplayArgs &args) override;
+      std::string MakeProfile(std::string &exec, bool) override;
    };
 
    class FirefoxCreator : public BrowserCreator {
@@ -71,34 +70,33 @@ protected:
       FirefoxCreator();
       virtual ~FirefoxCreator() = default;
       bool IsActive() const override { return !fProg.empty(); }
-      std::string MakeProfile(TString &exec, bool batch) override;
+      std::string MakeProfile(std::string &exec, bool batch) override;
    };
-
-   std::string fUrl; ///!< URL used to launch display
 
    static std::map<std::string, std::unique_ptr<Creator>> &GetMap();
 
    static std::unique_ptr<Creator> &FindCreator(const std::string &name, const std::string &libname = "");
 
-   static void TestProg(TString &prog, const std::string &nexttry);
-
 public:
-
-   /// Function should return URL for the widget dislpayed - local or http
-   using CreateUrlFunc_t = std::function<std::string(bool)>;
 
    RWebDisplayHandle(const std::string &url) : fUrl(url) {}
 
-   std::string GetUrl() const { return fUrl; }
+   // required virtual destructor for correct cleanup at the end
+   virtual ~RWebDisplayHandle() = default;
+
+   const std::string &GetUrl() const { return fUrl; }
+
+   void SetContent(const std::string &cont) { fContent = cont; }
+   const std::string &GetContent() const { return fContent; }
 
    static std::unique_ptr<RWebDisplayHandle> Display(const RWebDisplayArgs &args);
 
-   virtual ~RWebDisplayHandle() = default;
+   static bool DisplayUrl(const std::string &url);
+
+   static bool ProduceImage(const std::string &fname, const std::string &json, int width = 800, int height = 600);
 };
 
 }
 }
-
-
 
 #endif

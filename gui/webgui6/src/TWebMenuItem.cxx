@@ -1,7 +1,7 @@
 // Author:  Sergey Linev, GSI  29/06/2017
 
 /*************************************************************************
- * Copyright (C) 1995-2018, Rene Brun and Fons Rademakers.               *
+ * Copyright (C) 1995-2021, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
@@ -10,25 +10,15 @@
 
 #include "TWebMenuItem.h"
 
-#include "TROOT.h"
 #include "TClass.h"
 #include "TList.h"
 #include "TMethod.h"
 #include "TMethodArg.h"
 #include "TMethodCall.h"
-#include "TBufferJSON.h"
-
-void TWebMenuItems::Cleanup()
-{
-   for (auto &&item : fItems)
-      delete item;
-
-   fItems.clear();
-}
 
 void TWebMenuItems::PopulateObjectMenu(void *obj, TClass *cl)
 {
-   Cleanup();
+   fItems.clear();
 
    TList *lst = new TList;
    cl->GetMenuItems(lst);
@@ -36,7 +26,39 @@ void TWebMenuItems::PopulateObjectMenu(void *obj, TClass *cl)
    TIter iter(lst);
    TMethod *m = nullptr;
 
+   Bool_t has_editor = kFALSE;
+
+   TClass *last_class = nullptr;
+
    while ((m = (TMethod *)iter()) != nullptr) {
+
+      Bool_t is_editor = kFALSE;
+
+      if (strcmp(m->GetClass()->GetName(), "TH1") == 0) {
+         if (strcmp(m->GetName(), "SetHighlight") == 0) continue;
+         if (strcmp(m->GetName(), "DrawPanel") == 0) is_editor = kTRUE;
+      } else if (strcmp(m->GetClass()->GetName(), "TGraph") == 0) {
+         if (strcmp(m->GetName(), "SetHighlight") == 0) continue;
+         if (strcmp(m->GetName(), "DrawPanel") == 0) is_editor = kTRUE;
+      } else if (strcmp(m->GetClass()->GetName(), "TAttFill") == 0) {
+         if (strcmp(m->GetName(), "SetFillAttributes") == 0) is_editor = kTRUE;
+      } else if (strcmp(m->GetClass()->GetName(), "TAttLine") == 0) {
+         if (strcmp(m->GetName(), "SetLineAttributes") == 0) is_editor = kTRUE;
+      } else if (strcmp(m->GetClass()->GetName(), "TAttMarker") == 0) {
+         if (strcmp(m->GetName(), "SetMarkerAttributes") == 0) is_editor = kTRUE;
+      } else if (strcmp(m->GetClass()->GetName(), "TAttText") == 0) {
+         if (strcmp(m->GetName(), "SetTextAttributes") == 0) is_editor = kTRUE;
+      }
+
+      if (is_editor) {
+         if (!has_editor) {
+            AddMenuItem("Editor", "Attributes editor", "Show:Editor", last_class ? last_class : m->GetClass());
+            has_editor = kTRUE;
+         }
+         continue;
+      }
+
+      last_class = m->GetClass();
 
       if (m->IsMenuItem() == kMenuToggle) {
          TString getter;
@@ -82,12 +104,12 @@ void TWebMenuItems::PopulateObjectMenu(void *obj, TClass *cl)
             if (m->GetClass()) item->SetClassName(m->GetClass()->GetName());
 
             TIter args_iter(args);
-            TMethodArg *arg = 0;
+            TMethodArg *arg = nullptr;
 
-            while ((arg = dynamic_cast<TMethodArg *>(args_iter())) != 0) {
-               TWebMenuArgument menu_arg(arg->GetName(), arg->GetTitle(), arg->GetFullTypeName());
-               if (arg->GetDefault()) menu_arg.SetDefault(arg->GetDefault());
-               item->AddArg(menu_arg);
+            while ((arg = dynamic_cast<TMethodArg *>(args_iter())) != nullptr) {
+               const char *dflt = arg->GetDefault();
+               if (!dflt) dflt = "";
+               item->GetArgs().emplace_back(arg->GetName(), arg->GetTitle(), arg->GetFullTypeName(), dflt);
             }
 
             Add(item);
@@ -96,10 +118,4 @@ void TWebMenuItems::PopulateObjectMenu(void *obj, TClass *cl)
    }
 
    delete lst;
-
-}
-
-TString TWebMenuItems::ProduceJSON()
-{
-   return TBufferJSON::ToJSON(&fItems);
 }

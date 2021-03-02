@@ -26,14 +26,17 @@ the trees in the chain.
 
 #include "TChain.h"
 
+#include <iostream>
+#include <cfloat>
+
 #include "TBranch.h"
 #include "TBrowser.h"
+#include "TBuffer.h"
 #include "TChainElement.h"
 #include "TClass.h"
 #include "TColor.h"
 #include "TCut.h"
 #include "TError.h"
-#include "TMath.h"
 #include "TFile.h"
 #include "TFileInfo.h"
 #include "TFriendElement.h"
@@ -55,6 +58,9 @@ the trees in the chain.
 #include "TFileStager.h"
 #include "TFilePrefetch.h"
 #include "TVirtualMutex.h"
+#include "TVirtualPerfStats.h"
+#include "strlcpy.h"
+#include "snprintf.h"
 
 ClassImp(TChain);
 
@@ -192,7 +198,7 @@ TChain::~TChain()
    fFiles = 0;
 
    //first delete cache if exists
-   auto tc = fFile ? fTree->GetReadCache(fFile) : nullptr;
+   auto tc = fFile && fTree ? fTree->GetReadCache(fFile) : nullptr;
    if (tc) {
       delete tc;
       fFile->SetCacheRead(0, fTree);
@@ -700,6 +706,7 @@ TFriendElement* TChain::AddFriend(const char* chain, TFile* dummy)
 
 TFriendElement* TChain::AddFriend(TTree* chain, const char* alias, Bool_t /* warn = kFALSE */)
 {
+   if (!chain) return nullptr;
    if (!fFriends) fFriends = new TList();
    TFriendElement *fe = new TFriendElement(this,chain,alias);
    R__ASSERT(fe);
@@ -718,6 +725,7 @@ TFriendElement* TChain::AddFriend(TTree* chain, const char* alias, Bool_t /* war
    if (!t) {
       Warning("AddFriend","Unknown TChain %s",chain->GetName());
    }
+   chain->RegisterExternalFriend(fe);
    return fe;
 }
 
@@ -773,7 +781,9 @@ void TChain::DirectoryAutoAdd(TDirectory * /* dir */)
 ///
 /// This function accepts TCut objects as arguments.
 /// Useful to use the string operator +, example:
+/// ~~~{.cpp}
 ///    ntuple.Draw("x",cut1+cut2+cut3);
+/// ~~~
 ///
 
 Long64_t TChain::Draw(const char* varexp, const TCut& selection,
@@ -1267,6 +1277,7 @@ Int_t TChain::LoadBaskets(Long64_t /*maxmemory*/)
 ///       the TTree is missing from the file.
 ///   * -5: Internal error, please report the circumstance when this happen
 ///       as a ROOT issue.
+///   * -6: An error occurred within the notify callback.
 ///
 /// Note: This is the only routine which sets the value of fTree to
 ///       a non-zero pointer.
@@ -1319,48 +1330,24 @@ Long64_t TChain::LoadTree(Long64_t entry)
       if (fFriends) {
          // The current tree has not changed but some of its friends might.
          //
-         // An alternative would move this code to each of
-         // the functions calling LoadTree (and to overload a few more).
          TIter next(fFriends);
          TFriendLock lock(this, kLoadTree);
          TFriendElement* fe = 0;
-         TFriendElement* fetree = 0;
-         Bool_t needUpdate = kFALSE;
          while ((fe = (TFriendElement*) next())) {
-            TObjLink* lnk = 0;
-            if (fTree->GetListOfFriends()) {
-               lnk = fTree->GetListOfFriends()->FirstLink();
-            }
-            fetree = 0;
-            while (lnk) {
-               TObject* obj = lnk->GetObject();
-               if (obj->TestBit(TFriendElement::kFromChain) && obj->GetName() && !strcmp(fe->GetName(), obj->GetName())) {
-                  fetree = (TFriendElement*) obj;
-                  break;
-               }
-               lnk = lnk->Next();
-            }
             TTree* at = fe->GetTree();
-            if (at->InheritsFrom(TChain::Class())) {
-               Int_t oldNumber = ((TChain*) at)->GetTreeNumber();
-               TTree* old = at->GetTree();
-               TTree* oldintree = fetree ? fetree->GetTree() : 0;
-               at->LoadTreeFriend(entry, this);
-               Int_t newNumber = ((TChain*) at)->GetTreeNumber();
-               if ((oldNumber != newNumber) || (old != at->GetTree()) || (oldintree && (oldintree != at->GetTree()))) {
-                  // We can not compare just the tree pointers because
-                  // they could be reused. So we compare the tree
-                  // number instead.
+            // If the tree is a
+            // direct friend of the chain, it should be scanned
+            // used the chain entry number and NOT the tree entry
+            // number (treeReadEntry) hence we do:
+            at->LoadTreeFriend(entry, this);
+         }
+         Bool_t needUpdate = kFALSE;
+         if (fTree->GetListOfFriends()) {
+            for(auto fetree : ROOT::Detail::TRangeStaticCast<TFriendElement>(*fTree->GetListOfFriends())) {
+               if (fetree->IsUpdated()) {
                   needUpdate = kTRUE;
-                  fTree->RemoveFriend(oldintree);
-                  fTree->AddFriend(at->GetTree(), fe->GetName())->SetBit(TFriendElement::kFromChain);
+                  fetree->ResetUpdated();
                }
-            } else {
-               // else we assume it is a simple tree If the tree is a
-               // direct friend of the chain, it should be scanned
-               // used the chain entry number and NOT the tree entry
-               // number (treeReadEntry) hence we redo:
-               at->LoadTreeFriend(entry, this);
             }
          }
          if (needUpdate) {
@@ -1387,6 +1374,15 @@ Long64_t TChain::LoadTree(Long64_t entry)
                      *pp = br;
                   }
                   if (br) {
+                     if (!frelement->GetCheckedType()) {
+                        Int_t res = CheckBranchAddressType(br, TClass::GetClass(frelement->GetBaddressClassName()),
+                                                         (EDataType) frelement->GetBaddressType(), frelement->GetBaddressIsPtr());
+                        if ((res & kNeedEnableDecomposedObj) && !br->GetMakeClass()) {
+                           br->SetMakeClass(kTRUE);
+                        }
+                        frelement->SetDecomposedObj(br->GetMakeClass());
+                        frelement->SetCheckedType(kTRUE);
+                     }
                      // FIXME: We may have to tell the branch it should
                      //        not be an owner of the object pointed at.
                      br->SetAddress(addr);
@@ -1401,15 +1397,20 @@ Long64_t TChain::LoadTree(Long64_t entry)
             }
             // Notify user if requested.
             if (fNotify) {
-               fNotify->Notify();
+               if(!fNotify->Notify()) return -6;
             }
          }
       }
       return treeReadEntry;
    }
 
-   // Delete the current tree and open the new tree.
+   if (fExternalFriends) {
+      for(auto external_fe : ROOT::Detail::TRangeStaticCast<TFriendElement>(*fExternalFriends)) {
+         external_fe->MarkUpdated();
+      }
+   }
 
+   // Delete the current tree and open the new tree.
    TTreeCache* tpf = 0;
    // Delete file unless the file owns this chain!
    // FIXME: The "unless" case here causes us to leak memory.
@@ -1492,6 +1493,9 @@ Long64_t TChain::LoadTree(Long64_t entry)
       fTree = 0;
       returnCode = -3;
    } else {
+      if (fPerfStats)
+         fPerfStats->SetFile(fFile);
+
       // Note: We do *not* own fTree after this, the file does!
       fTree = dynamic_cast<TTree*>(fFile->Get(element->GetName()));
       if (!fTree) {
@@ -1513,10 +1517,10 @@ Long64_t TChain::LoadTree(Long64_t entry)
    // Reuse cache from previous file (if any).
    if (tpf) {
       if (fFile) {
-         tpf->ResetCache();
-         fFile->SetCacheRead(tpf, fTree);
          // FIXME: fTree may be zero here.
          tpf->UpdateBranches(fTree);
+         tpf->ResetCache();
+         fFile->SetCacheRead(tpf, fTree);
       } else {
          // FIXME: One of the file in the chain is missing
          // we have no place to hold the pointer to the
@@ -1554,7 +1558,7 @@ Long64_t TChain::LoadTree(Long64_t entry)
             // to properly account for the number of files/trees even if they
             // have no entries.
             if (fNotify) {
-               fNotify->Notify();
+               if(!fNotify->Notify()) return -6;
             }
 
             // Load the next TTree.
@@ -1623,7 +1627,8 @@ Long64_t TChain::LoadTree(Long64_t entry)
          t->LoadTreeFriend(entry, this);
          TTree* friend_t = t->GetTree();
          if (friend_t) {
-            fTree->AddFriend(friend_t, fe->GetName())->SetBit(TFriendElement::kFromChain);
+            auto localfe = fTree->AddFriend(t, fe->GetName());
+            localfe->SetBit(TFriendElement::kFromChain);
          }
       }
    }
@@ -1652,6 +1657,15 @@ Long64_t TChain::LoadTree(Long64_t entry)
             *pp = br;
          }
          if (br) {
+            if (!element->GetCheckedType()) {
+               Int_t res = CheckBranchAddressType(br, TClass::GetClass(element->GetBaddressClassName()),
+                                                  (EDataType) element->GetBaddressType(), element->GetBaddressIsPtr());
+               if ((res & kNeedEnableDecomposedObj) && !br->GetMakeClass()) {
+                  br->SetMakeClass(kTRUE);
+               }
+               element->SetDecomposedObj(br->GetMakeClass());
+               element->SetCheckedType(kTRUE);
+            }
             // FIXME: We may have to tell the branch it should
             //        not be an owner of the object pointed at.
             br->SetAddress(addr);
@@ -1677,7 +1691,7 @@ Long64_t TChain::LoadTree(Long64_t entry)
 
    // Notify user we have switched trees if requested.
    if (fNotify) {
-      fNotify->Notify();
+      if(!fNotify->Notify()) return -6;
    }
 
    // Return the new local entry number.
@@ -2109,13 +2123,14 @@ void TChain::ParseTreeFilename(const char *name, TString &filename, TString &tre
                                Bool_t) const
 {
    Ssiz_t pIdx = kNPOS;
-   filename = name;
+   filename.Clear();
    treename.Clear();
    query.Clear();
    suffix.Clear();
 
    // General case
    TUrl url(name, kTRUE);
+   filename = (strcmp(url.GetProtocol(), "file")) ? url.GetUrl() : url.GetFileAndOptions();
 
    TString fn = url.GetFile();
    // Extract query, if any
@@ -2134,9 +2149,10 @@ void TChain::ParseTreeFilename(const char *name, TString &filename, TString &tre
    }
    // Suffix
    suffix = url.GetFileAndOptions();
+   // Get options from suffix by removing the file name
    suffix.Replace(suffix.Index(fn), fn.Length(), "");
-   // Remove it from the file name
-   filename.Remove(filename.Index(fn) + fn.Length());
+   // Remove the options suffix from the original file name
+   filename.Replace(filename.Index(suffix), suffix.Length(), "");
 
    // Special case: [...]file.root/treename
    static const char *dotr = ".root";
@@ -2306,7 +2322,7 @@ void TChain::ResetAfterMerge(TFileMergeInfo *info)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Save TChain as a C++ statements on output stream out.
-/// With the option "friend" save the description of all the 
+/// With the option "friend" save the description of all the
 /// TChain's friend trees or chains as well.
 
 void TChain::SavePrimitive(std::ostream &out, Option_t *option)
@@ -2492,6 +2508,11 @@ Int_t TChain::SetBranchAddress(const char *bname, void* add, TBranch** ptr)
       }
       if (branch) {
          res = CheckBranchAddressType(branch, TClass::GetClass(element->GetBaddressClassName()), (EDataType) element->GetBaddressType(), element->GetBaddressIsPtr());
+         if ((res & kNeedEnableDecomposedObj) && !branch->GetMakeClass()) {
+            branch->SetMakeClass(kTRUE);
+         }
+         element->SetDecomposedObj(branch->GetMakeClass());
+         element->SetCheckedType(kTRUE);
          if (fClones) {
             void* oldAdd = branch->GetAddress();
             for (TObjLink* lnk = fClones->FirstLink(); lnk; lnk = lnk->Next()) {
@@ -2500,9 +2521,13 @@ Int_t TChain::SetBranchAddress(const char *bname, void* add, TBranch** ptr)
                if (cloneBr && (cloneBr->GetAddress() == oldAdd)) {
                   // the clone's branch is still pointing to us
                   cloneBr->SetAddress(add);
+                  if ((res & kNeedEnableDecomposedObj) && !cloneBr->GetMakeClass()) {
+                     cloneBr->SetMakeClass(kTRUE);
+                  }
                }
             }
          }
+
          branch->SetAddress(add);
       } else {
          Error("SetBranchAddress", "unknown branch -> %s", bname);
@@ -2607,9 +2632,9 @@ void TChain::SetDirectory(TDirectory* dir)
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Set the input entry list (processing the entries of the chain will then be
-/// limited to the entries in the list)
-/// This function finds correspondance between the sub-lists of the TEntryList
-/// and the trees of the TChain
+/// limited to the entries in the list).
+/// This function finds correspondence between the sub-lists of the TEntryList
+/// and the trees of the TChain.
 /// By default (opt=""), both the file names of the chain elements and
 /// the file names of the TEntryList sublists are expanded to full path name.
 /// If opt = "ne", the file names are taken as they are and not expanded

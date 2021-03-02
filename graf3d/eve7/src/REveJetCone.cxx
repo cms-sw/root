@@ -1,8 +1,8 @@
-// @(#)root/eve:$Id$
-// Author: Matevz Tadel, Jochen Thaeder 2009
+// @(#)root/eve7:$Id$
+// Author: Matevz Tadel, Jochen Thaeder 2009, 2018
 
 /*************************************************************************
- * Copyright (C) 1995-2007, Rene Brun and Fons Rademakers.               *
+ * Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
@@ -15,14 +15,11 @@
 #include <ROOT/REveRenderData.hxx>
 
 #include "TMath.h"
+#include "TClass.h"
 
 #include <cassert>
 
-#include "json.hpp"
-
-
 using namespace ROOT::Experimental;
-namespace REX = ROOT::Experimental;
 
 /** \class REveJetCone
 \ingroup REve
@@ -59,9 +56,10 @@ REveJetCone::REveJetCone(const Text_t* n, const Text_t* t) :
    REveShape(n, t),
    fApex(),
    fLimits(), fThetaC(10),
-   fEta(0), fPhi(0), fDEta(0), fDPhi(0), fNDiv(72)
+   fEta(0), fPhi(0), fDEta(0), fDPhi(0), fNDiv(36)
 {
-   fColor = kGreen;
+   fPickable  = true;
+   fFillColor = kGreen;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -77,7 +75,7 @@ void  REveJetCone::SetNDiv(Int_t n)
 ////////////////////////////////////////////////////////////////////////////////
 /// Fill core part of JSON representation.
 
-Int_t REveJetCone::WriteCoreJson(nlohmann::json& j, Int_t rnr_offset)
+Int_t REveJetCone::WriteCoreJson(nlohmann::json &j, Int_t rnr_offset)
 {
    Int_t ret = REveElement::WriteCoreJson(j, rnr_offset);
 
@@ -127,7 +125,7 @@ void REveJetCone::ComputeBBox()
 
 TClass* REveJetCone::ProjectedClass(const REveProjection*) const
 {
-   return REveJetConeProjected::Class();
+   return TClass::GetClass<REveJetConeProjected>();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -243,7 +241,7 @@ Projection of REveJetCone.
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
 
-REveJetConeProjected::REveJetConeProjected(const char* n, const char* t) :
+REveJetConeProjected::REveJetConeProjected(const std::string& n, const std::string& t) :
    REveShape(n, t)
 {
 }

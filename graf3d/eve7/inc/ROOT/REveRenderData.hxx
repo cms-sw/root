@@ -1,8 +1,8 @@
-// @(#)root/eve:$Id$
+// @(#)root/eve7:$Id$
 // Authors: Matevz Tadel & Alja Mrak-Tadel: 2006, 2007, 2018
 
 /*************************************************************************
- * Copyright (C) 1995-2018, Rene Brun and Fons Rademakers.               *
+ * Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
@@ -20,12 +20,13 @@
 namespace ROOT {
 namespace Experimental {
 
-class REveRenderData {
+class REveRenderData
+{
 private:
-   std::string fRnrFunc;
+   std::string        fRnrFunc;
    std::vector<float> fVertexBuffer;
    std::vector<float> fNormalBuffer;
-   std::vector<int> fIndexBuffer;
+   std::vector<int>   fIndexBuffer;
    std::vector<float> fMatrix;
 
 public:
@@ -72,18 +73,18 @@ public:
       PushN(v.fZ);
    }
 
-   void PushI(int i) { fIndexBuffer.emplace_back(i); }
+   void PushI(UInt_t i) { fIndexBuffer.emplace_back(i); }
 
-   void PushI(int i, int j, int k)
+   void PushI(UInt_t i, UInt_t j, UInt_t k)
    {
       PushI(i);
       PushI(j);
       PushI(k);
    }
 
-   void PushI(int *v, int len) { fIndexBuffer.insert(fIndexBuffer.end(), v, v + len); }
+   void PushI(UInt_t *v, int len) { fIndexBuffer.insert(fIndexBuffer.end(), v, v + len); }
 
-   void PushI(std::vector<int> &v) { fIndexBuffer.insert(fIndexBuffer.end(), v.begin(), v.end()); }
+   void PushI(std::vector<UInt_t> &v) { fIndexBuffer.insert(fIndexBuffer.end(), v.begin(), v.end()); }
 
    void SetMatrix(const double *arr);
 

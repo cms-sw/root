@@ -47,7 +47,7 @@
 
 #include "TList.h"
 #include "Varargs.h"
-#include <stdio.h>
+#include <cstdio>
 
 class TTree;
 class TBranch;
@@ -62,7 +62,6 @@ class TStreamerElement;
 
 #include "TTreeFormula.h"
 #include "TFormLeafInfo.h"
-
 
 #include "TBranchElement.h"
 #include "TChain.h"
@@ -1228,11 +1227,11 @@ namespace Internal {
       }
 
       // Now let's add the TTreeFriend (if any)
-      if (tree->GetListOfFriends()) {
+      if (tree->GetTree()->GetListOfFriends()) {
          TFriendElement *fe;
          Int_t count = 0;
 
-         TIter nextfriend(tree->GetListOfFriends());
+         TIter nextfriend(tree->GetTree()->GetListOfFriends());
          while ((fe = (TFriendElement*)nextfriend())) {
             TTree *t = fe->GetTree();
             TFriendProxyDescriptor *desc;
@@ -1585,7 +1584,7 @@ namespace Internal {
          return;
       }
 
-      TString fileLocation = gSystem->DirName(fScript);
+      TString fileLocation = gSystem->GetDirName(fScript);
 
       TString incPath = gSystem->GetIncludePath(); // of the form -Idir1  -Idir2 -Idir3
       incPath.Append(":").Prepend(" ");
@@ -1596,16 +1595,16 @@ namespace Internal {
       incPath.Prepend(fileLocation+":.:");
 
       const char *filename = gSystem->Which(incPath,fScript);
-      if (filename==0) {
+      if (!filename) {
          Error("WriteProxy","Can not find the user's script: %s",fScript.Data());
          return;
       }
-      const char *cutfilename = 0;
+      const char *cutfilename = nullptr;
       if (fCutScript.Length()) {
-         fileLocation = gSystem->DirName(fCutScript);
+         fileLocation = gSystem->GetDirName(fCutScript);
          incPath.Prepend(fileLocation+":.:");
          cutfilename = gSystem->Which(incPath,fCutScript);
-         if (cutfilename==0) {
+         if (!cutfilename) {
             Error("WriteProxy","Can not find the user's cut script: %s",fCutScript.Data());
             delete [] filename;
             return;

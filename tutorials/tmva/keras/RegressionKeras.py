@@ -1,13 +1,22 @@
 #!/usr/bin/env python
+## \file
+## \ingroup tutorial_tmva_keras
+## \notebook -nodraw
+## This tutorial shows how to do regression in TMVA with neural networks
+## trained with keras.
+##
+## \macro_code
+##
+## \date 2017
+## \author TMVA Team
 
 from ROOT import TMVA, TFile, TTree, TCut
 from subprocess import call
 from os.path import isfile
 
-from keras.models import Sequential
-from keras.layers.core import Dense, Activation
-from keras.regularizers import l2
-from keras.optimizers import SGD
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Activation
+from tensorflow.keras.optimizers import SGD
 
 # Setup TMVA
 TMVA.Tools.Instance()
@@ -39,7 +48,7 @@ dataloader.PrepareTrainingAndTestTree(TCut(''),
 
 # Define model
 model = Sequential()
-model.add(Dense(64, activation='tanh', W_regularizer=l2(1e-5), input_dim=2))
+model.add(Dense(64, activation='tanh', input_dim=2))
 model.add(Dense(1, activation='linear'))
 
 # Set loss and optimizer

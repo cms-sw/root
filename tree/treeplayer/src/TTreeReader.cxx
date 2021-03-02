@@ -45,10 +45,10 @@ A simpler analysis example can be found below: it histograms a function of the p
 ~~~{.cpp}
 // A simple TTreeReader use: read data from hsimple.root (written by hsimple.C)
 
-#include "TFile.h
-#include "TH1F.h
-#include "TTreeReader.h
-#include "TTreeReaderValue.h
+#include "TFile.h"
+#include "TH1F.h"
+#include "TTreeReader.h"
+#include "TTreeReaderValue.h"
 
 void hsimpleReader() {
    // Create a histogram for the values we read.
@@ -95,9 +95,9 @@ TTreeReaderValue and TTreeReaderArray would look like this:
 #include <iostream>
 
 bool CheckValue(ROOT::Internal::TTreeReaderValueBase& value) {
-   if (value->GetSetupStatus() < 0) {
-      std::cerr << "Error " << value->GetSetupStatus()
-                << "setting up reader for " << value->GetBranchName() << '\n';
+   if (value.GetSetupStatus() < 0) {
+      std::cerr << "Error " << value.GetSetupStatus()
+                << "setting up reader for " << value.GetBranchName() << '\n';
       return false;
    }
    return true;
@@ -133,12 +133,17 @@ bool analyze(TFile* file) {
 
    TH1F("hist", "TTreeReader example histogram", 10, 0., 100.);
 
+   bool firstEntry = true;
    while (reader.Next()) {
-      if (!CheckValue(weight)) return false;
-      if (!CheckValue(triggerInfo)) return false;
-      if (!CheckValue(muons)) return false;
-      if (!CheckValue(jetPt)) return false;
-      if (!CheckValue(taus)) return false;
+      if (firstEntry) {
+         // Check that branches exist and their types match our expectation.
+         if (!CheckValue(weight)) return false;
+         if (!CheckValue(triggerInfo)) return false;
+         if (!CheckValue(muons)) return false;
+         if (!CheckValue(jetPt)) return false;
+         if (!CheckValue(taus)) return false;
+         firstentry = false;
+      }
 
       // Access the TriggerInfo object as if it's a pointer.
       if (!triggerInfo->hasMuonL1())
@@ -164,6 +169,9 @@ bool analyze(TFile* file) {
          }
       }
    } // TTree entry / event loop
+
+   // Return true if we have iterated through all entries.
+   return reader.GetEntryStatus() == TTreeReader::kEntryBeyondEnd;
 }
 ~~~
 */
@@ -174,7 +182,7 @@ ClassImp(TTreeReader);
 using namespace ROOT::Internal;
 
 // Provide some storage for the poor little symbol.
-constexpr const char * const TTreeReader::fgEntryStatusText[TTreeReader::kEntryBeyondEnd + 1];
+constexpr const char * const TTreeReader::fgEntryStatusText[TTreeReader::kEntryUnknownError + 1];
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Default constructor.  Call SetTree to connect to a TTree.
@@ -183,6 +191,13 @@ TTreeReader::TTreeReader() : fNotify(this) {}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Access data from tree.
+///
+/// \param tree The TTree or TChain to read from
+/// \param entryList It can be a single TEntryList with global entry numbers (supported, as
+///                  an extension, also in the case of a TChain) or, if the first parameter
+///                  is a TChain, a TEntryList with sub-TEntryLists with local entry numbers.
+///                  In the latter case, the TEntryList must be associated to the TChain, as
+///                  per chain.SetEntryList(&entryList).
 
 TTreeReader::TTreeReader(TTree* tree, TEntryList* entryList /*= nullptr*/):
    fTree(tree),
@@ -190,7 +205,7 @@ TTreeReader::TTreeReader(TTree* tree, TEntryList* entryList /*= nullptr*/):
    fNotify(this)
 {
    if (!fTree) {
-      Error("TTreeReader", "TTree is NULL!");
+      ::Error("TTreeReader::TTreeReader", "TTree is NULL!");
    } else {
       Initialize();
    }
@@ -200,6 +215,14 @@ TTreeReader::TTreeReader(TTree* tree, TEntryList* entryList /*= nullptr*/):
 /// Access data from the tree called keyname in the directory (e.g. TFile)
 /// dir, or the current directory if dir is NULL. If keyname cannot be
 /// found, or if it is not a TTree, IsInvalid() will return true.
+///
+/// \param keyname The name of the TTree to read from file
+/// \param dir The TDirectory to read keyname from
+/// \param entryList It can be a single TEntryList with global entry numbers (supported, as
+///                  an extension, also in the case of a TChain) or, if the first parameter
+///                  is a TChain, a TEntryList with sub-TEntryLists with local entry numbers.
+///                  In the latter case, the TEntryList must be associated to the TChain, as
+///                  per chain.SetEntryList(&entryList).
 
 TTreeReader::TTreeReader(const char* keyname, TDirectory* dir, TEntryList* entryList /*= nullptr*/):
    fEntryList(entryList),
@@ -207,6 +230,12 @@ TTreeReader::TTreeReader(const char* keyname, TDirectory* dir, TEntryList* entry
 {
    if (!dir) dir = gDirectory;
    dir->GetObject(keyname, fTree);
+   if (!fTree) {
+      std::string msg = "No TTree called ";
+      msg += keyname;
+      msg += " was found in the selected TDirectory.";
+      Error("TTreeReader", "%s", msg.c_str());
+   }
    Initialize();
 }
 
@@ -249,6 +278,12 @@ void TTreeReader::Initialize()
    fLoadTreeStatus = kLoadTreeNone;
    if (fTree->InheritsFrom(TChain::Class())) {
       SetBit(kBitIsChain);
+   } else if (fEntryList && fEntryList->GetLists()) {
+      Error("Initialize", "We are not processing a TChain but the TEntryList contains sublists. Please "
+                          "provide a simple TEntryList with no sublists instead.");
+      fEntryStatus = kEntryNoTree;
+      fLoadTreeStatus = kNoTree;
+      return;
    }
 
    fDirector = new ROOT::Internal::TBranchProxyDirector(fTree, -1);
@@ -295,7 +330,10 @@ Bool_t TTreeReader::Notify()
       SetBit(kBitHaveWarnedAboutEntryListAttachedToTTree);
    }
 
-   fDirector->Notify();
+   if (!fDirector->Notify()) {
+      Error("SetEntryBase()", "There was an error while notifying the proxies.");
+      return false;
+   }
 
    if (fProxiesSet) {
       for (auto value: fValues) {
@@ -351,7 +389,8 @@ Bool_t TTreeReader::SetProxies() {
 ////////////////////////////////////////////////////////////////////////////////
 /// Set the range of entries to be loaded by `Next()`; end will not be loaded.
 ///
-/// If end <= begin, `end` is ignored (set to `-1`) and only `begin` is used.
+/// If end <= begin, `end` is ignored (set to `-1`, i.e. will run on all entries from `begin` onwards).
+///
 /// Example:
 ///
 /// ~~~ {.cpp}
@@ -360,6 +399,11 @@ Bool_t TTreeReader::SetProxies() {
 ///   // Will load entries 3 and 4.
 /// }
 /// ~~~
+///
+/// Note that if a TEntryList is present, beginEntry and endEntry refer to the beginEntry-th/endEntry-th entries of the
+/// TEntryList (or the main TEntryList in case it has sub-entrylists). In other words, SetEntriesRange can
+/// be used to only loop over part of the TEntryList, but not to further restrict the actual TTree/TChain entry numbers
+/// considered.
 ///
 /// \param beginEntry The first entry to be loaded by `Next()`.
 /// \param endEntry   The entry where `Next()` will return kFALSE, not loading it.
@@ -376,13 +420,20 @@ TTreeReader::EEntryStatus TTreeReader::SetEntriesRange(Long64_t beginEntry, Long
       return kEntryNotFound;
    }
 
+   // Update data members to correctly reflect the defined range
    if (endEntry > beginEntry)
       fEndEntry = endEntry;
    else
       fEndEntry = -1;
+
+   fBeginEntry = beginEntry;
+
    if (beginEntry - 1 < 0)
+      // Reset the cache if reading from the first entry of the tree
       Restart();
    else {
+      // Load the first entry in the range. SetEntry() will also call SetProxies(),
+      // thus adding all the branches to the cache and triggering the learning phase.
       EEntryStatus es = SetEntry(beginEntry - 1);
       if (es != kEntryValid) {
          Error("SetEntriesRange()", "Error setting first entry %lld: %s",
@@ -390,8 +441,6 @@ TTreeReader::EEntryStatus TTreeReader::SetEntriesRange(Long64_t beginEntry, Long
          return es;
       }
    }
-
-   fBeginEntry = beginEntry;
 
    return kEntryValid;
 }
@@ -410,19 +459,40 @@ void TTreeReader::Restart() {
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Returns the number of entries of the TEntryList if one is provided, else
+/// of the TTree / TChain, independent of a range set by SetEntriesRange()
+/// by calling TTree/TChain::GetEntriesFast.
+
+
+Long64_t TTreeReader::GetEntries() const {
+   if (fEntryList)
+      return fEntryList->GetN();
+   if (!fTree)
+      return -1;
+   return fTree->GetEntriesFast();
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+/// Returns the number of entries of the TEntryList if one is provided, else
 /// of the TTree / TChain, independent of a range set by SetEntriesRange().
 ///
 /// \param force If `IsChain()` and `force`, determines whether all TFiles of
 ///   this TChain should be opened to determine the exact number of entries
 /// of the TChain. If `!IsChain()`, `force` is ignored.
 
-Long64_t TTreeReader::GetEntries(Bool_t force) const {
+Long64_t TTreeReader::GetEntries(Bool_t force)  {
    if (fEntryList)
       return fEntryList->GetN();
    if (!fTree)
       return -1;
-   if (force)
-      return fTree->GetEntries();
+   if (force) {
+      fSetEntryBaseCallingLoadTree = kTRUE;
+      auto res = fTree->GetEntries();
+      // Go back to where we were:
+      fTree->LoadTree(GetCurrentEntry());
+      fSetEntryBaseCallingLoadTree = kFALSE;
+      return res;
+   }
    return fTree->GetEntriesFast();
 }
 
@@ -454,10 +524,19 @@ TTreeReader::EEntryStatus TTreeReader::SetEntryBase(Long64_t entry, Bool_t local
          fEntryStatus = kEntryNotFound;
          return fEntryStatus;
       }
-      if (entry >= 0) entryAfterList = fEntryList->GetEntry(entry);
-      if (local && IsChain()) {
-         // Must translate the entry list's entry to the current TTree's entry number.
-         local = kFALSE;
+      if (entry >= 0) {
+         if (fEntryList->GetLists()) {
+            R__ASSERT(IsChain());
+            int treenum = -1;
+            entryAfterList = fEntryList->GetEntryAndTree(entry, treenum);
+            entryAfterList += static_cast<TChain *>(fTree)->GetTreeOffset()[treenum];
+            // We always translate local entry numbers to global entry numbers for TChain+TEntryList with sublists
+            local = false;
+         } else {
+            // Could be a TTree or a TChain (TTreeReader also supports single TEntryLists for TChains).
+            // In both cases, we are using the global entry numbers coming from the single TEntryList.
+            entryAfterList = fEntryList->GetEntry(entry);
+         }
       }
    }
 
@@ -533,7 +612,7 @@ TTreeReader::EEntryStatus TTreeReader::SetEntryBase(Long64_t entry, Bool_t local
       }
    }
 
-   if (fEndEntry >= 0 && entry >= fEndEntry) {
+   if ((fEndEntry >= 0 && entry >= fEndEntry) || (fEntry >= fTree->GetEntriesFast())) {
       fEntryStatus = kEntryBeyondEnd;
       return fEntryStatus;
    }

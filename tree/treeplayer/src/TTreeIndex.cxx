@@ -14,7 +14,10 @@ A Tree Index with majorname and minorname.
 */
 
 #include "TTreeIndex.h"
+
+#include "TTreeFormula.h"
 #include "TTree.h"
+#include "TBuffer.h"
 #include "TMath.h"
 
 ClassImp(TTreeIndex);
@@ -319,6 +322,10 @@ bool TTreeIndex::ConvertOldToNew()
 Long64_t TTreeIndex::GetEntryNumberFriend(const TTree *parent)
 {
    if (!parent) return -3;
+   // We reached the end of the parent tree
+   Long64_t pentry = parent->GetReadEntry();
+   if (pentry >= parent->GetEntries())
+      return -2;
    GetMajorFormulaParent(parent);
    GetMinorFormulaParent(parent);
    if (!fMajorFormulaParent || !fMinorFormulaParent) return -1;
@@ -326,7 +333,6 @@ Long64_t TTreeIndex::GetEntryNumberFriend(const TTree *parent)
       // The Tree Index in the friend has a pair majorname,minorname
       // not available in the parent Tree T.
       // if the friend Tree has less entries than the parent, this is an error
-      Long64_t pentry = parent->GetReadEntry();
       if (pentry >= fTree->GetEntries()) return -2;
       // otherwise we ignore the Tree Index and return the entry number
       // in the parent Tree.
@@ -493,6 +499,18 @@ TTreeFormula *TTreeIndex::GetMinorFormulaParent(const TTree *parent)
    return fMinorFormulaParent;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+/// Return kTRUE if index can be applied to the TTree
+
+Bool_t TTreeIndex::IsValidFor(const TTree *parent)
+{
+   auto *majorFormula = GetMajorFormulaParent(parent);
+   auto *minorFormula = GetMinorFormulaParent(parent);
+   if ((majorFormula == nullptr || majorFormula->GetNdim() == 0) ||
+       (minorFormula == nullptr || minorFormula->GetNdim() == 0))
+         return kFALSE;
+   return kTRUE;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Print the table with : serial number, majorname, minorname.

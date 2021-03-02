@@ -103,20 +103,21 @@
 
 #include "TXMLPlayer.h"
 
-#include "Riostream.h"
 #include "TROOT.h"
+#include "TList.h"
 #include "TClass.h"
 #include "TVirtualStreamerInfo.h"
 #include "TStreamerElement.h"
 #include "TObjArray.h"
-#include "TObjString.h"
 #include "TDataMember.h"
 #include "TMethod.h"
 #include "TDataType.h"
 #include "TMethodCall.h"
-#include "TFunction.h"
 #include "TVirtualCollectionProxy.h"
 #include "TClassEdit.h"
+#include "strlcpy.h"
+#include <iostream>
+#include <fstream>
 #include <string>
 #include <vector>
 

@@ -1,24 +1,15 @@
 // Author:  Sergey Linev, GSI,  6/04/2017
 
 /*************************************************************************
- * Copyright (C) 1995-2018, Rene Brun and Fons Rademakers.               *
+ * Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-
 #ifndef ROOT_TWebSnapshot
 #define ROOT_TWebSnapshot
-
-//////////////////////////////////////////////////////////////////////////
-//                                                                      //
-// TWebSnapshot                                                         //
-//                                                                      //
-// Paint state of object to transfer to JavaScript side                 //
-//                                                                      //
-//////////////////////////////////////////////////////////////////////////
 
 #include "TObject.h"
 
@@ -68,11 +59,19 @@ public:
 class TPadWebSnapshot : public TWebSnapshot {
 protected:
    bool fActive{false};                                    ///< true when pad is active
+   bool fReadOnly{true};                                   ///< when canvas or pad are in readonly mode
    std::vector<std::unique_ptr<TWebSnapshot>> fPrimitives; ///< list of all primitives, drawn in the pad
+
 public:
-   TPadWebSnapshot() { SetKind(kSubPad); }
+   TPadWebSnapshot(bool readonly = true)
+   {
+      SetKind(kSubPad);
+      fReadOnly = readonly;
+   }
 
    void SetActive(bool on = true) { fActive = on; }
+
+   bool IsReadOnly() const { return fReadOnly; }
 
    TWebSnapshot &NewPrimitive(TObject *obj = nullptr, const std::string &opt = "");
 
@@ -80,7 +79,25 @@ public:
 
    TWebSnapshot &NewSpecials();
 
-   ClassDef(TPadWebSnapshot,1)  // Pad painting snapshot, used for JSROOT
+   ClassDef(TPadWebSnapshot, 1) // Pad painting snapshot, used for JSROOT
 };
+
+// =================================================================================
+
+class TCanvasWebSnapshot : public TPadWebSnapshot {
+protected:
+   Long64_t fVersion{0};           ///< actual canvas version
+   std::string fScripts;           ///< custom scripts to load
+public:
+   TCanvasWebSnapshot() {} // NOLINT: not allowed to use = default because of TObject::kIsOnHeap detection, see ROOT-10300
+   TCanvasWebSnapshot(bool readonly, Long64_t v) : TPadWebSnapshot(readonly), fVersion(v) {}
+
+   Long64_t GetVersion() const { return fVersion; }
+
+   void SetScripts(const std::string &src) { fScripts = src; }
+
+   ClassDef(TCanvasWebSnapshot, 1) // Canvas painting snapshot, used for JSROOT
+};
+
 
 #endif

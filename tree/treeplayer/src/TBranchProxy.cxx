@@ -17,10 +17,9 @@ of the autoloading of branches as well as all the generic setup routine.
 #include "TBranchProxy.h"
 #include "TLeaf.h"
 #include "TBranchElement.h"
+#include "TBranchObject.h"
 #include "TStreamerElement.h"
 #include "TStreamerInfo.h"
-#include "TRealData.h"
-#include "TDataMember.h"
 
 ClassImp(ROOT::Detail::TBranchProxy);
 
@@ -112,15 +111,17 @@ ROOT::Detail::TBranchProxy::TBranchProxy(TBranchProxyDirector* boss, TBranch* br
 /// the "path" to branch.
 static std::string GetFriendBranchName(TTree* directorTree, TBranch* branch, const char* fullBranchName)
 {
-   if (directorTree == branch->GetTree())
-      return branch->GetName();
+   // ROOT-10046: Here we need to ask for the tree with GetTree otherwise, if directorTree
+   // is a chain, this check is bogus and a bug can occour (ROOT-10046)
+   if (directorTree->GetTree() == branch->GetTree())
+      return branch->GetFullName().Data();
 
    // Friend case:
    std::string sFullBranchName = fullBranchName;
-   std::string::size_type pos = sFullBranchName.rfind(branch->GetName());
+   std::string::size_type pos = sFullBranchName.rfind(branch->GetFullName());
    if (pos != std::string::npos) {
       sFullBranchName.erase(pos);
-      sFullBranchName += branch->GetName();
+      sFullBranchName += branch->GetFullName();
    }
    return sFullBranchName;
 }
@@ -254,7 +255,16 @@ Bool_t ROOT::Detail::TBranchProxy::Setup()
       // This does not allow (yet) to precede the branch name with
       // its mother's name
       fBranch = fDirector->GetTree()->GetBranch(fBranchName.Data());
-      if (!fBranch) return false;
+      if (!fBranch) {
+         // FIXME
+         // While fixing ROOT-10019, this error was added to give to the user an even better experience
+         // in presence of a problem.
+         // It is not easy to distinguish the cases where this error is "expected"
+         // For now we do not print anything - see conversation here: https://github.com/root-project/root/pull/3746
+         //auto treeName = fDirector->GetTree()->GetName();
+         //::Error("TBranchProxy::Setup", "%s", Form("Unable to find branch %s in tree %s.\n",fBranchName.Data(), treeName));
+         return false;
+      }
 
       {
          // Calculate fBranchCount for a leaf.
@@ -298,7 +308,7 @@ Bool_t ROOT::Detail::TBranchProxy::Setup()
       }
 
       if (!fWhere) {
-         fBranch->SetAddress(0);
+         fBranch->SetupAddresses();
          fWhere = (double*)fBranch->GetAddress();
       }
 
@@ -391,11 +401,14 @@ Bool_t ROOT::Detail::TBranchProxy::Setup()
             fWhere = ((unsigned char*)be->GetObject()) + fOffset;
 
          }
+      } else if (fBranch->IsA() == TBranchObject::Class()) {
+         fIsaPointer = true; // this holds for all cases we test
+         fClassName = fBranch->GetClassName();
+         fClass = TClass::GetClass(fClassName);
       } else {
          fClassName = fBranch->GetClassName();
          fClass = TClass::GetClass(fClassName);
       }
-
 
       /*
         fClassName = fBranch->GetClassName(); // What about TClonesArray?

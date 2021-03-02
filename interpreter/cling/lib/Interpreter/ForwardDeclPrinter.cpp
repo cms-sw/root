@@ -54,7 +54,7 @@ namespace cling {
     Out() << "#pragma clang diagnostic ignored \"-Wignored-attributes\"" <<"\n";
     Out() << "#pragma clang diagnostic ignored \"-Wreturn-type-c-linkage\"" <<"\n";
     // Inject a special marker:
-    Out() << "extern int __Cling_Autoloading_Map;\n";
+    Out() << "extern int __Cling_AutoLoading_Map;\n";
 
     std::vector<std::string> macrodefs;
     if (printMacros) {
@@ -216,13 +216,14 @@ namespace cling {
        FE = PP.LookupFile(fileNameLoc, FileName, isAngled, FromDir, FromFile,
                           CurDir, /*SearchPath*/ 0,
                           /*RelativePath*/ 0, /*suggestedModule*/ 0,
-                          /*IsMapped*/ 0, /*SkipCache*/ false,
+                          /*IsMapped*/ 0, /*IsFramework*/ nullptr,
+                          /*SkipCache*/ false,
                           /*OpenFile*/ false, /*CacheFail*/ true);
        // Return true if we can '#include' the given filename
        return FE != nullptr;
      };
 
-     SourceLocation spellingLoc = m_SMgr.getSpellingLoc(D->getLocStart());
+     SourceLocation spellingLoc = m_SMgr.getSpellingLoc(D->getBeginLoc());
      // Walk up the include chain.
      PresumedLoc PLoc = m_SMgr.getPresumedLoc(spellingLoc);
      llvm::SmallVector<PresumedLoc, 16> PLocs;
@@ -378,6 +379,22 @@ namespace cling {
 //    }
   }
 
+  static void printExplicitSpecifier(ExplicitSpecifier ES,
+                                     llvm::raw_ostream &Out,
+                                     PrintingPolicy &Policy,
+                                     unsigned Indentation) {
+    std::string Proto = "explicit";
+    llvm::raw_string_ostream EOut(Proto);
+    if (ES.getExpr()) {
+      EOut << "(";
+      ES.getExpr()->printPretty(EOut, nullptr, Policy, Indentation);
+      EOut << ")";
+    }
+    EOut << " ";
+    EOut.flush();
+    Out << EOut.str();
+  }
+
   void ForwardDeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
     bool hasTrailingReturn = false;
 
@@ -409,9 +426,10 @@ namespace cling {
       if (D->isModulePrivate())    Out() << "__module_private__ ";
       if (D->isConstexpr() && !D->isExplicitlyDefaulted())
         Out() << "constexpr ";
-      if ((CDecl && CDecl->isExplicitSpecified()) ||
-          (ConversionDecl && ConversionDecl->isExplicit()))
-        Out() << "explicit ";
+
+      ExplicitSpecifier ExplicitSpec = ExplicitSpecifier::getFromDecl(D);
+      if (ExplicitSpec.isSpecified())
+        printExplicitSpecifier(ExplicitSpec, Out(), m_Policy, /*Indentation*/ 0);
     }
 
     PrintingPolicy SubPolicy(m_Policy);
@@ -490,7 +508,7 @@ namespace cling {
         Proto += ")";
       } else if (FT && isNoexceptExceptionSpec(FT->getExceptionSpecType())) {
         Proto += " noexcept";
-        if (FT->getExceptionSpecType() == EST_ComputedNoexcept) {
+        if (isComputedNoexcept(FT->getExceptionSpecType())) {
           Proto += "(";
           llvm::raw_string_ostream EOut(Proto);
           FT->getNoexceptExpr()->printPretty(EOut, 0, SubPolicy,
@@ -615,7 +633,7 @@ namespace cling {
     Out() << ';' << closeBraces << '\n';
   }
 
-  void ForwardDeclPrinter::VisitFriendDecl(FriendDecl *D) {
+  void ForwardDeclPrinter::VisitFriendDecl(FriendDecl *) {
   }
 
   void ForwardDeclPrinter::VisitFieldDecl(FieldDecl *D) {
@@ -835,7 +853,7 @@ namespace cling {
       skipDecl(D, "target decl failed.");
   }
 
-  void ForwardDeclPrinter::VisitTypeAliasTemplateDecl(TypeAliasTemplateDecl *D) {
+  void ForwardDeclPrinter::VisitTypeAliasTemplateDecl(TypeAliasTemplateDecl *) {
   }
 
   void ForwardDeclPrinter::VisitNamespaceAliasDecl(NamespaceAliasDecl *D) {
@@ -847,7 +865,7 @@ namespace cling {
     Out() << *D->getAliasedNamespace() << ';' << closeBraces << '\n';
   }
 
-  void ForwardDeclPrinter::VisitEmptyDecl(EmptyDecl *D) {
+  void ForwardDeclPrinter::VisitEmptyDecl(EmptyDecl *) {
 //    prettyPrintAttributes(D);
   }
 

@@ -12,22 +12,24 @@
 #include "RConfigure.h"
 
 #include "TROOT.h"
+#include "TBuffer.h"
 #include "TClassTree.h"
 #include "TClassTable.h"
 #include "TClass.h"
 #include "TBaseClass.h"
 #include "TDataMember.h"
 #include "TDataType.h"
-#include "TRealData.h"
 #include "TMethod.h"
 #include "TMethodArg.h"
-#include "TPad.h"
+#include "TVirtualPad.h"
 #include "TPaveClass.h"
 #include "TArrow.h"
-#include "TText.h"
 #include "TSystem.h"
 #include "TObjString.h"
-#include "Riostream.h"
+#include "strlcpy.h"
+#include "snprintf.h"
+
+#include <fstream>
 #include <algorithm>
 
 const Int_t kIsClassTree = BIT(7);
@@ -847,6 +849,7 @@ void TClassTree::ScanClasses(Int_t iclass)
       }
    }
    delete [] cname;
+   delete [] sourceName;
    sourceFile.close();
 }
 

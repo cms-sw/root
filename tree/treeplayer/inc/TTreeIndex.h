@@ -23,7 +23,8 @@
 
 
 #include "TVirtualIndex.h"
-#include "TTreeFormula.h"
+
+class TTreeFormula;
 
 class TTreeIndex : public TVirtualIndex {
 
@@ -39,9 +40,12 @@ protected:
    TTreeFormula  *fMajorFormulaParent;  //! Pointer to major TreeFormula in Parent tree (if any)
    TTreeFormula  *fMinorFormulaParent;  //! Pointer to minor TreeFormula in Parent tree (if any)
 
+   TTreeFormula  *GetMajorFormulaParent(const TTree *parent);
+   TTreeFormula  *GetMinorFormulaParent(const TTree *parent);
+
 private:
-   TTreeIndex(const TTreeIndex&);            // Not implemented.
-   TTreeIndex &operator=(const TTreeIndex&); // Not implemented.
+   TTreeIndex(const TTreeIndex&) = delete;            // Not implemented.
+   TTreeIndex &operator=(const TTreeIndex&) = delete; // Not implemented.
 
 public:
    TTreeIndex();
@@ -61,8 +65,7 @@ public:
    virtual Long64_t       GetN()            const {return fN;}
    virtual TTreeFormula  *GetMajorFormula();
    virtual TTreeFormula  *GetMinorFormula();
-   virtual TTreeFormula  *GetMajorFormulaParent(const TTree *parent);
-   virtual TTreeFormula  *GetMinorFormulaParent(const TTree *parent);
+   virtual Bool_t         IsValidFor(const TTree *parent);
    virtual void           Print(Option_t *option="") const;
    virtual void           UpdateFormulaLeaves(const TTree *parent);
    virtual void           SetTree(const TTree *T);

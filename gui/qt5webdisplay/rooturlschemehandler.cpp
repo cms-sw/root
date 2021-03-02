@@ -1,12 +1,10 @@
-/// \file rootqt5.cpp
-/// \ingroup CanvasPainter ROOT7
-/// \author Sergey Linev <S.Linev@gsi.de>
-/// \date 2017-06-29
-/// \warning This is part of the ROOT 7 prototype! It will change without notice. It might trigger earthquakes. Feedback
-/// is welcome!
+// Author: Sergey Linev <S.Linev@gsi.de>
+// Date: 2017-06-29
+// Warning: This is part of the ROOT 7 prototype! It will change without notice. It might trigger earthquakes. Feedback is welcome!
+
 
 /*************************************************************************
- * Copyright (C) 1995-2017, Rene Brun and Fons Rademakers.               *
+ * Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
@@ -16,25 +14,31 @@
 
 #include "rooturlschemehandler.h"
 
+#include "rootwebpage.h" // only because of logger channel
+
 #include <QBuffer>
 #include <QByteArray>
 #include <QFile>
 #include <QWebEngineUrlRequestJob>
-#include <QWebEngineProfile>
 
-#include <ROOT/TLogger.hxx>
+#include <ROOT/RLogger.hxx>
 
 #include "THttpServer.h"
 #include "THttpCallArg.h"
 #include "TBase64.h"
 
+/** \class UrlRequestJobHolder
+\ingroup qt5webdisplay
 
-/////////////////////////////////////////////////////////////////////////////////////
-/// Class UrlRequestJobHolder
-/// Required to monitor state of QWebEngineUrlRequestJob
-/// Qt can delete object at any time, therefore one connects destroy signal
-/// from the request to clear pointer
-////////////////////////////////////////////////////////////////////////////////////
+Class UrlRequestJobHolder
+Required to monitor state of QWebEngineUrlRequestJob
+Qt can delete object at any time, therefore one connects destroy signal
+from the request to clear pointer
+
+*/
+
+/////////////////////////////////////////////////////////////////
+/// Constructor
 
 UrlRequestJobHolder::UrlRequestJobHolder(QWebEngineUrlRequestJob *req) : QObject(), fRequest(req)
 {
@@ -42,11 +46,17 @@ UrlRequestJobHolder::UrlRequestJobHolder(QWebEngineUrlRequestJob *req) : QObject
       connect(fRequest, &QObject::destroyed, this, &UrlRequestJobHolder::onRequestDeleted);
 }
 
+/////////////////////////////////////////////////////////////////
+/// destroyed signal handler
+
 void UrlRequestJobHolder::onRequestDeleted(QObject *obj)
 {
    if (fRequest == obj)
       fRequest = nullptr;
 }
+
+/////////////////////////////////////////////////////////////////
+/// Reset holder
 
 void UrlRequestJobHolder::reset()
 {
@@ -57,10 +67,23 @@ void UrlRequestJobHolder::reset()
 
 // ===================================================================
 
+/////////////////////////////////////////////////////////////////////////////////////
+/// Class TWebGuiCallArg
+/// Specialized handler of requests in THttpServer with QWebEngine
+////////////////////////////////////////////////////////////////////////////////////
+
 class TWebGuiCallArg : public THttpCallArg {
 
 protected:
    UrlRequestJobHolder fRequest;
+
+   void CheckWSPageContent(THttpWSHandler *) override
+   {
+      std::string search = "JSROOT.connectWebWindow({";
+      std::string replace = search + "platform:\"qt5\",socket_kind:\"rawlongpoll\",";
+
+      ReplaceAllinContent(search, replace, true);
+   }
 
 public:
    explicit TWebGuiCallArg(QWebEngineUrlRequestJob *req = nullptr) : THttpCallArg(), fRequest(req) {}
@@ -91,17 +114,17 @@ public:
       }
    }
 
-   virtual void HttpReplied()
+   void HttpReplied() override
    {
       QWebEngineUrlRequestJob *req = fRequest.req();
 
       if (!req) {
-         R__ERROR_HERE("Qt5") << "Qt5 request already processed path " << GetPathName() << " file " << GetFileName();
+         R__LOG_ERROR(QtWebDisplayLog()) << "Qt5 request already processed path " << GetPathName() << " file " << GetFileName();
          return;
       }
 
       if (Is404()) {
-         R__ERROR_HERE("Qt5") << "Qt5 request FAIL path " << GetPathName() << " file " << GetFileName();
+         R__LOG_ERROR(QtWebDisplayLog()) << "Qt5 request FAIL path " << GetPathName() << " file " << GetFileName();
 
          req->fail(QWebEngineUrlRequestJob::UrlNotFound);
          // abort request
@@ -128,13 +151,19 @@ public:
 };
 
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////
+/// Returns fully qualified URL, required to open in QWindow
 
-RootUrlSchemeHandler::RootUrlSchemeHandler(THttpServer *server, int counter)
-   : QWebEngineUrlSchemeHandler(), fServer(server)
+QString RootUrlSchemeHandler::MakeFullUrl(THttpServer *serv, const QString &url)
 {
-   fProtocol = Form("roothandler%d", counter);
+   // TODO: provide support for many servers
+   fServer = serv;
+
+   QString res = "rootscheme://root.server1";
+   res.append(url);
+   return res;
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// Start processing of emulated HTTP request in WebEngine scheme handler
@@ -145,7 +174,7 @@ void RootUrlSchemeHandler::requestStarted(QWebEngineUrlRequestJob *request)
    QUrl url = request->requestUrl();
 
    if (!fServer) {
-      R__ERROR_HERE("webgui") << "Server not specified when request is started";
+      R__LOG_ERROR(QtWebDisplayLog()) << "Server not specified when request is started";
       request->fail(QWebEngineUrlRequestJob::UrlNotFound);
       return;
    }
@@ -153,6 +182,8 @@ void RootUrlSchemeHandler::requestStarted(QWebEngineUrlRequestJob *request)
    QString inp_path = url.path();
    QString inp_query = url.query();
    QString inp_method = request->requestMethod();
+
+   // printf("REQUEST PATH:%s QUERY:%s\n", inp_path.toLatin1().data(), inp_query.toLatin1().data());
 
    auto arg = std::make_shared<TWebGuiCallArg>(request);
 
@@ -180,20 +211,4 @@ void RootUrlSchemeHandler::requestStarted(QWebEngineUrlRequestJob *request)
 
    // can process immediately - function called in main thread
    fServer->SubmitHttp(arg, kTRUE);
-}
-
-/////////////////////////////////////////////////////////////////
-/// Returns fully qualified URL, required to open in QWindow
-
-QString RootUrlSchemeHandler::MakeFullUrl(const QString &url)
-{
-   QString res = fProtocol;
-   res.append(":");
-   res.append(url);
-   if (url.indexOf("?")<0)
-      res.append("?");
-   else
-      res.append("&");
-   res.append("platform=qt5&ws=rawlongpoll");
-   return res;
 }

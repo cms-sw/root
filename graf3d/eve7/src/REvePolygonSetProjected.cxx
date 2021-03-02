@@ -1,8 +1,8 @@
-// @(#)root/eve:$Id$
+// @(#)root/eve7:$Id$
 // Authors: Matevz Tadel & Alja Mrak-Tadel: 2006, 2007
 
 /*************************************************************************
- * Copyright (C) 1995-2007, Rene Brun and Fons Rademakers.               *
+ * Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
@@ -18,11 +18,9 @@
 #include "TBuffer3D.h"
 #include "TBuffer3DTypes.h"
 
-#include "json.hpp"
 #include <cassert>
 
 using namespace ROOT::Experimental;
-namespace REX = ROOT::Experimental;
 
 namespace
 {
@@ -36,7 +34,6 @@ namespace
    };
 
    typedef std::list<Seg_t>           LSeg_t;
-   typedef std::list<Seg_t>::iterator LSegIt_t;
 }
 
 /** \class REvePolygonSetProjected
@@ -51,7 +48,7 @@ array in REvePolygonSetProjected.
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
 
-REvePolygonSetProjected::REvePolygonSetProjected(const char* n, const char* t) :
+REvePolygonSetProjected::REvePolygonSetProjected(const std::string &n, const std::string &t) :
    REveShape(n, t),
    fBuff(),
    fPnts()
@@ -96,7 +93,7 @@ void REvePolygonSetProjected::BuildRenderData()
 
    std::vector<Double_t> verts;
    verts.reserve(3 * fPnts.size());
-   std::vector<Int_t>    polys;
+   std::vector<UInt_t>    polys;
    polys.reserve(n_poly_info);
 
    for (auto &p : fPols)
@@ -214,7 +211,7 @@ Bool_t REvePolygonSetProjected::IsFirstIdxHead(Int_t s0, Int_t s1)
 ////////////////////////////////////////////////////////////////////////////////
 /// Project and reduce buffer points.
 
-std::vector<Int_t> REvePolygonSetProjected::ProjectAndReducePoints()
+std::vector<UInt_t> REvePolygonSetProjected::ProjectAndReducePoints()
 {
    REveProjection* projection = fManager->GetProjection();
 
@@ -228,24 +225,25 @@ std::vector<Int_t> REvePolygonSetProjected::ProjectAndReducePoints()
    }
 
    int npoints = 0;
-   std::vector<Int_t> idxMap;
+   std::vector<UInt_t> idxMap;
    idxMap.resize(buffN);
 
    std::vector<int> ra;
    ra.resize(buffN);  // list of reduced vertices
    for (UInt_t v = 0; v < (UInt_t)buffN; ++v)
    {
-      idxMap[v] = -1;
+      bool found = false;
       for (Int_t k = 0; k < npoints; ++k)
       {
          if (pnts[v].SquareDistance(pnts[ra[k]]) < REveProjection::fgEpsSqr)
          {
             idxMap[v] = k;
+            found = true;
             break;
          }
       }
       // have not found a point inside epsilon, add new point in scaled array
-      if (idxMap[v] == -1)
+      if (!found)
       {
          idxMap[v] = npoints;
          ra[npoints] = v;
@@ -271,7 +269,7 @@ std::vector<Int_t> REvePolygonSetProjected::ProjectAndReducePoints()
 /// Check if polygon has dimensions above REveProjection::fgEps and add it
 /// to a list if it is not a duplicate.
 
-Float_t REvePolygonSetProjected::AddPolygon(std::list<Int_t> &pp, vpPolygon_t &pols)
+Float_t REvePolygonSetProjected::AddPolygon(std::list<UInt_t> &pp, vpPolygon_t &pols)
 {
    if (pp.size() <= 2) return 0;
 
@@ -293,14 +291,14 @@ Float_t REvePolygonSetProjected::AddPolygon(std::list<Int_t> &pp, vpPolygon_t &p
       if ((Int_t) pp.size() != refP.NPoints())
          continue;
 
-      Int_t start_idx = refP.FindPoint(pp.front());
+      int start_idx = refP.FindPoint(pp.front());
       if (start_idx < 0)
             continue;
       if (++start_idx >= refP.NPoints()) start_idx = 0;
 
       // Same orientation duplicate
       {
-         std::list<Int_t>::iterator u = ++pp.begin();
+         auto u = ++pp.begin();
          Int_t pidx = start_idx;
          while (u != pp.end())
          {
@@ -313,7 +311,7 @@ Float_t REvePolygonSetProjected::AddPolygon(std::list<Int_t> &pp, vpPolygon_t &p
       }
       // Inverse orientation duplicate
       {
-         std::list<Int_t>::iterator u = --pp.end();
+         auto u = --pp.end();
          Int_t pidx = start_idx;
          while (u != pp.begin())
          {
@@ -326,7 +324,7 @@ Float_t REvePolygonSetProjected::AddPolygon(std::list<Int_t> &pp, vpPolygon_t &p
       }
    }
 
-   std::vector<int> pv(pp.size(), 0);
+   std::vector<UInt_t> pv(pp.size(), 0);
    int  count = 0;
    for (auto &&u : pp) {
       pv[count++] = u;
@@ -340,18 +338,18 @@ Float_t REvePolygonSetProjected::AddPolygon(std::list<Int_t> &pp, vpPolygon_t &p
 ////////////////////////////////////////////////////////////////////////////////
 /// Build polygons from list of buffer polygons.
 
-Float_t REvePolygonSetProjected::MakePolygonsFromBP(std::vector<Int_t> &idxMap)
+Float_t REvePolygonSetProjected::MakePolygonsFromBP(std::vector<UInt_t> &idxMap)
 {
    REveProjection* projection = fManager->GetProjection();
    Int_t   *bpols = fBuff->fPols;
    Float_t  surf  = 0; // surface of projected polygons
    for (UInt_t pi = 0; pi < fBuff->NbPols(); ++pi)
    {
-      std::list<Int_t> pp; // points in current polygon
+      std::list<UInt_t> pp; // points in current polygon
       UInt_t  segN =  bpols[1];
       Int_t  *seg  = &bpols[2];
       // start idx in the fist segment depends of second segment
-      Int_t   tail, head;
+      UInt_t   tail, head;
       if (IsFirstIdxHead(seg[0], seg[1]))
       {
          head = idxMap[fBuff->fSegs[3*seg[0] + 1]];
@@ -362,16 +360,16 @@ Float_t REvePolygonSetProjected::MakePolygonsFromBP(std::vector<Int_t> &idxMap)
          head = idxMap[fBuff->fSegs[3*seg[0] + 2]];
          tail = idxMap[fBuff->fSegs[3*seg[0] + 1]];
       }
-      pp.push_back(head);
+      pp.emplace_back(head);
       // printf("start idx head %d, tail %d\n", head, tail);
       LSeg_t segs;
       for (UInt_t s = 1; s < segN; ++s)
-         segs.push_back(Seg_t(fBuff->fSegs[3*seg[s] + 1],fBuff->fSegs[3*seg[s] + 2]));
+         segs.emplace_back(fBuff->fSegs[3*seg[s] + 1],fBuff->fSegs[3*seg[s] + 2]);
 
-      for (LSegIt_t it = segs.begin(); it != segs.end(); ++it)
+      for (auto &it: segs)
       {
-         Int_t mv1 = idxMap[(*it).fV1];
-         Int_t mv2 = idxMap[(*it).fV2];
+         UInt_t mv1 = idxMap[it.fV1];
+         UInt_t mv2 = idxMap[it.fV2];
 
          if ( ! projection->AcceptSegment(fPnts[mv1], fPnts[mv2], REveProjection::fgEps))
          {
@@ -398,10 +396,9 @@ Float_t REvePolygonSetProjected::MakePolygonsFromBP(std::vector<Int_t> &idxMap)
 /// First creates a segment pool according to reduced and projected points
 /// and then build polygons from the pool.
 
-Float_t REvePolygonSetProjected::MakePolygonsFromBS(std::vector<Int_t> &idxMap)
+Float_t REvePolygonSetProjected::MakePolygonsFromBS(std::vector<UInt_t> &idxMap)
 {
    LSeg_t   segs;
-   LSegIt_t it;
    Float_t  surf = 0; // surface of projected polygons
    REveProjection *projection = fManager->GetProjection();
    for (UInt_t s = 0; s < fBuff->NbSegs(); ++s)
@@ -415,10 +412,10 @@ Float_t REvePolygonSetProjected::MakePolygonsFromBS(std::vector<Int_t> &idxMap)
       vor2 = idxMap[vo2];
       if (vor1 == vor2) continue;
       // check duplicate
-      for (it = segs.begin(); it != segs.end(); ++it)
+      for (auto &seg: segs)
       {
-         Int_t vv1 = (*it).fV1;
-         Int_t vv2 = (*it).fV2;
+         Int_t vv1 = seg.fV1;
+         Int_t vv2 = seg.fV2;
          if((vv1 == vor1 && vv2 == vor2) || (vv1 == vor2 && vv2 == vor1))
          {
             duplicate = kTRUE;
@@ -426,25 +423,25 @@ Float_t REvePolygonSetProjected::MakePolygonsFromBS(std::vector<Int_t> &idxMap)
          }
       }
       if (duplicate == kFALSE && projection->AcceptSegment(fPnts[vor1], fPnts[vor2], REveProjection::fgEps))
-         segs.push_back(Seg_t(vor1, vor2));
+         segs.emplace_back(vor1, vor2);
    }
 
-   while ( ! segs.empty())
+   while (!segs.empty())
    {
-      std::list<Int_t> pp; // points in current polygon
+      std::list<UInt_t> pp; // points in current polygon
       pp.push_back(segs.front().fV1);
-      Int_t tail = segs.front().fV2;
+      UInt_t tail = segs.front().fV2;
       segs.pop_front();
       Bool_t match = kTRUE;
       while (match && ! segs.empty())
       {
-         for (LSegIt_t k = segs.begin(); k != segs.end(); ++k)
+         for (auto k = segs.begin(); k != segs.end(); ++k)
          {
-            Int_t cv1 = (*k).fV1;
-            Int_t cv2 = (*k).fV2;
+            UInt_t cv1 = (*k).fV1;
+            UInt_t cv2 = (*k).fV2;
             if (cv1 == tail || cv2 == tail)
             {
-               pp.push_back(tail);
+               pp.emplace_back(tail);
                tail = (cv1 == tail) ? cv2 : cv1;
                segs.erase(k);
                match = kTRUE;

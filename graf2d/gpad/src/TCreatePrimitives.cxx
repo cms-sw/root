@@ -30,22 +30,20 @@ to create new primitives in gPad from the TPad toolbar.
 #include "KeySymbols.h"
 #include "TCutG.h"
 
-#include <iostream>
-
-TLatex *TCreatePrimitives::fgText = 0;
-TCurlyLine *TCreatePrimitives::fgCLine = 0;
-TArrow *TCreatePrimitives::fgArrow = 0;
-TLine *TCreatePrimitives::fgLine = 0;
-TCurlyArc *TCreatePrimitives::fgCArc = 0;
-TArc *TCreatePrimitives::fgArc = 0;
-TEllipse *TCreatePrimitives::fgEllipse = 0;
-TPave *TCreatePrimitives::fgPave = 0;
-TPaveText *TCreatePrimitives::fgPaveText = 0;
-TPavesText *TCreatePrimitives::fgPavesText = 0;
-TDiamond *TCreatePrimitives::fgDiamond = 0;
-TPaveLabel *TCreatePrimitives::fgPaveLabel = 0;
-TGraph *TCreatePrimitives::fgPolyLine = 0;
-TBox *TCreatePrimitives::fgPadBBox = 0;
+TLatex *TCreatePrimitives::fgText = nullptr;
+TCurlyLine *TCreatePrimitives::fgCLine = nullptr;
+TArrow *TCreatePrimitives::fgArrow = nullptr;
+TLine *TCreatePrimitives::fgLine = nullptr;
+TCurlyArc *TCreatePrimitives::fgCArc = nullptr;
+TArc *TCreatePrimitives::fgArc = nullptr;
+TEllipse *TCreatePrimitives::fgEllipse = nullptr;
+TPave *TCreatePrimitives::fgPave = nullptr;
+TPaveText *TCreatePrimitives::fgPaveText = nullptr;
+TPavesText *TCreatePrimitives::fgPavesText = nullptr;
+TDiamond *TCreatePrimitives::fgDiamond = nullptr;
+TPaveLabel *TCreatePrimitives::fgPaveLabel = nullptr;
+TGraph *TCreatePrimitives::fgPolyLine = nullptr;
+TBox *TCreatePrimitives::fgPadBBox = nullptr;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// TCreatePrimitives default constructor.
@@ -608,6 +606,16 @@ void TCreatePrimitives::PolyLine(Int_t event, Int_t px, Int_t py, Int_t mode)
                gROOT->SetEditorMode();
             }
          }
+      } else {
+         if (mode == kPolyLine) {
+            fgPolyLine = new TGraph(1);
+            fgPolyLine->ResetBit(TGraph::kClipFrame);
+         } else { // TCutG case
+            fgPolyLine = (TGraph*) new TCutG("CUTG",1);
+         }
+         fgPolyLine->SetPoint(0, gPad->PadtoX(gPad->AbsPixeltoX(pxnew)),
+         gPad->PadtoY(gPad->AbsPixeltoY(pynew)));
+         fgPolyLine->Draw("L");
       }
       break;
 
@@ -626,6 +634,7 @@ void TCreatePrimitives::PolyLine(Int_t event, Int_t px, Int_t py, Int_t mode)
          gPad->Update();
          gROOT->SetEditorMode();
       }
+      fgPolyLine = 0;
       break;
 
    case kMouseMotion:
@@ -636,16 +645,7 @@ void TCreatePrimitives::PolyLine(Int_t event, Int_t px, Int_t py, Int_t mode)
                                        gPad->PadtoY(gPad->AbsPixeltoY(pynew)));
          gPad->Modified();
          gPad->Update();
-      } else {
-         if (mode == kPolyLine) {
-            fgPolyLine = new TGraph(1);
-            fgPolyLine->ResetBit(TGraph::kClipFrame);
-         } else { // TCutG case
-            fgPolyLine = (TGraph*) new TCutG("CUTG",1);
-         }
-         fgPolyLine->SetPoint(0, gPad->PadtoX(gPad->AbsPixeltoX(pxnew)),
-                                 gPad->PadtoY(gPad->AbsPixeltoY(pynew)));
-         fgPolyLine->Draw("L");
+
       }
       break;
    }
@@ -708,7 +708,7 @@ void TCreatePrimitives::Text(Int_t event, Int_t px, Int_t py, Int_t mode)
 
       if (mode == kMarker) {
          TMarker *marker;
-         marker = new TMarker(x,y,gStyle->GetMarkerStyle());
+         marker = new TMarker(x,y,28);
          gPad->GetCanvas()->Selected(gPad, marker, kButton1Down);
          marker->Draw();
          gROOT->SetEditorMode();

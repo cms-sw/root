@@ -62,17 +62,18 @@
 #include "TGResourcePool.h"
 #include "TList.h"
 #include "TClass.h"
-#include "TGListView.h"
 #include "TGMimeTypes.h"
 #include "TKey.h"
 #include "TKeyMapFile.h"
 #include "TGDNDManager.h"
-#include "Riostream.h"
 #include "RConfigure.h"
-#include <stdlib.h>
+#include "TVirtualX.h"
+
+#include <iostream>
+#include <cstdlib>
 
 
-TGGC *TGContainer::fgLineGC = 0;
+TGGC *TGContainer::fgLineGC = nullptr;
 
 const Int_t kAutoScrollFudge = 10;
 const Int_t kAcceleration[kAutoScrollFudge+1] = {1,1,1,2,3,4,6,7,8,16,32};
@@ -564,7 +565,6 @@ void TGContainer::SelectAll()
    TIter next(fList);
    TGFrameElement *el;
    TGFrame *fr;
-   TGPosition pos = GetPagePosition();
 
    while ((el = (TGFrameElement *) next())) {
       fr = el->fFrame;
@@ -586,7 +586,6 @@ void TGContainer::UnSelectAll()
 {
    TIter next(fList);
    TGFrameElement *el;
-   TGPosition pos = GetPagePosition();
    TGFrame *fr;
 
    while ((el = (TGFrameElement *) next())) {

@@ -37,17 +37,31 @@ namespace cling {
 
   class StartParsingRAII {
     LookupHelper& m_LH;
+    llvm::SaveAndRestore<bool> SaveIsRecursivelyRunning;
+    // Save and restore the state of the Parser and lexer.
+    // Note: ROOT::Internal::ParsingStateRAII also save and restore the state of
+    // Sema, including pending instantiation for example.  It is not clear
+    // whether we need to do so here too or whether we need to also see the
+    // "on-going" semantic information ... For now, we leave Sema untouched.
+    clang::Preprocessor::CleanupAndRestoreCacheRAII fCleanupRAII;
+    clang::Parser::ParserCurTokRestoreRAII fSavedCurToken;
     ParserStateRAII ResetParserState;
-
+    clang::Sema::SFINAETrap fSFINAETrap;
     void prepareForParsing(llvm::StringRef code, llvm::StringRef bufferName,
                            LookupHelper::DiagSetting diagOnOff);
   public:
     StartParsingRAII(LookupHelper& LH, llvm::StringRef code,
                      llvm::StringRef bufferName,
                      LookupHelper::DiagSetting diagOnOff)
-      : m_LH(LH), ResetParserState(*LH.m_Parser.get(), true /*skipToEOF*/) {
-    prepareForParsing(code, bufferName, diagOnOff);
-  }
+        : m_LH(LH), SaveIsRecursivelyRunning(LH.IsRecursivelyRunning),
+          fCleanupRAII(LH.m_Parser->getPreprocessor()),
+          fSavedCurToken(*LH.m_Parser),
+          ResetParserState(*LH.m_Parser,
+                           !LH.IsRecursivelyRunning /*skipToEOF*/),
+          fSFINAETrap(m_LH.m_Parser->getActions()) {
+      LH.IsRecursivelyRunning = true;
+      prepareForParsing(code, bufferName, diagOnOff);
+    }
 
     ~StartParsingRAII() { pop(); }
     void pop() const {}
@@ -57,7 +71,7 @@ namespace cling {
                                            llvm::StringRef bufferName,
                                           LookupHelper::DiagSetting diagOnOff) {
     ++m_LH.m_TotalParseRequests;
-    Parser& P = *m_LH.m_Parser.get();
+    Parser& P = *m_LH.m_Parser;
     Sema& S = P.getActions();
     Preprocessor& PP = P.getPreprocessor();
     //
@@ -69,7 +83,9 @@ namespace cling {
                                       diagOnOff == LookupHelper::NoDiagnostics);
     //
     //  Tell Sema we are not in the process of doing an instantiation.
-    //
+    //  fSFINAETrap will reset any SFINAE error count of a SFINAE context from "above".
+    //  fSFINAETrap will reset this value to the previous one; the line below is overwriting
+    //  the value set by fSFINAETrap.
     P.getActions().InNonInstantiationSFINAEContext = true;
     //
     //  Tell the parser to not attempt spelling correction.
@@ -84,7 +100,8 @@ namespace cling {
     if (!PP.isIncrementalProcessingEnabled()) {
       PP.enableIncrementalProcessing();
     }
-    assert(!code.empty()&&"prepareForParsing should only be called when needd");
+    assert(!code.empty() &&
+           "prepareForParsing should only be called when need");
 
     // Create a fake file to parse the type name.
     FileID FID;
@@ -483,9 +500,9 @@ namespace cling {
     //  Try parsing the type name.
     //
     clang::ParsedAttributes Attrs(P.getAttrFactory());
-
-    TypeResult Res(P.ParseTypeName(0,Declarator::TypeNameContext,clang::AS_none,
-                                   0,&Attrs));
+    // FIXME: All arguments to ParseTypeName are the default arguments. Remove.
+    TypeResult Res(P.ParseTypeName(0, DeclaratorContext::TypeNameContext,
+                                   clang::AS_none, 0, &Attrs));
     if (Res.isUsable()) {
       // Accept it only if the whole name was parsed.
       if (P.NextToken().getKind() == clang::tok::eof) {
@@ -1214,11 +1231,11 @@ namespace cling {
         // Double check const-ness.
         if (const clang::CXXMethodDecl *md =
             llvm::dyn_cast<clang::CXXMethodDecl>(TheDecl)) {
-          if (md->getTypeQualifiers() & clang::Qualifiers::Const) {
+          if (md->getMethodQualifiers().hasConst()) {
             if (!objectIsConst) {
               TheDecl = 0;
             }
-          } else {
+          } else { // FIXME: The else should be attached to the if hasConst stmt
             if (objectIsConst) {
               TheDecl = 0;
             }
@@ -1233,7 +1250,8 @@ namespace cling {
                                  llvm::StringRef funcName,
                                  Interpreter* Interp,
                                  UnqualifiedId &FuncId,
-                                 LookupHelper::DiagSetting diagOnOff) {
+                                 LookupHelper::DiagSetting diagOnOff,
+                                 ParserStateRAII &ResetParserState) {
 
     // Use a very simple parse step that dectect whether the name search (which
     // is already supposed to be an unqualified name) is a simple identifier,
@@ -1332,6 +1350,7 @@ namespace cling {
     //  Create a fake file to parse the function name.
     //
     // FIXME:, TODO: Cleanup that complete mess.
+    ResetParserState.SetSkipToEOF(true);
     {
       PP.getDiagnostics().setSuppressAllDiagnostics(diagOnOff ==
                                                    LookupHelper::NoDiagnostics);
@@ -1361,7 +1380,7 @@ namespace cling {
                              /*AllowDestructorName*/true,
                              /*AllowConstructorName*/true,
                              /*AllowDeductionGuide*/ false,
-                             ParsedType(), TemplateKWLoc,
+                             ParsedType(), &TemplateKWLoc,
                              FuncId)) {
       // Failed parse, cleanup.
       return false;
@@ -1406,9 +1425,9 @@ namespace cling {
     S.EnterDeclaratorContext(P.getCurScope(), foundDC);
 
     UnqualifiedId FuncId;
-    ParserStateRAII ResetParserState(P, true /*skipToEOF*/);
-    if (!ParseWithShortcuts(foundDC, Context, funcName, Interp,
-                            FuncId, diagOnOff)) {
+    ParserStateRAII ResetParserState(P, false /*skipToEOF*/);
+    if (!ParseWithShortcuts(foundDC, Context, funcName, Interp, FuncId,
+                            diagOnOff, ResetParserState)) {
       // Failed parse, cleanup.
       // Destroy the scope we created first, and
       // restore the original.
@@ -1588,22 +1607,18 @@ namespace cling {
       //
       //  Create the array of Expr from the array of Types.
       //
-
-      typedef llvm::SmallVectorImpl<QualType>::const_iterator iterator;
-      for(iterator iter = GivenTypes.begin(), end = GivenTypes.end();
-          iter != end;
-          ++iter) {
-        const clang::QualType QT = iter->getCanonicalType();
+      assert(!ExprMemory.size() && "Size must be 0");
+      ExprMemory.resize(GivenTypes.size() + 1);
+      for(size_t i = 0, e = GivenTypes.size(); i < e; ++i) {
+        const clang::QualType QT = GivenTypes[i].getCanonicalType();
         {
           ExprValueKind VK = VK_RValue;
           if (QT->getAs<LValueReferenceType>()) {
             VK = VK_LValue;
           }
           clang::QualType NonRefQT(QT.getNonReferenceType());
-          unsigned int slot = ExprMemory.size();
-          ExprMemory.resize(slot+1);
-          Expr* val = new (&ExprMemory[slot]) OpaqueValueExpr(SourceLocation(),
-                                                              NonRefQT, VK);
+          Expr* val = new (&ExprMemory[i]) OpaqueValueExpr(SourceLocation(),
+                                                           NonRefQT, VK);
           GivenArgs.push_back(val);
         }
       }
@@ -1656,9 +1671,12 @@ namespace cling {
           if (QT->getAs<LValueReferenceType>()) {
             VK = VK_LValue;
           }
+          // FIXME: This is potentially dangerous because if the capacity exceeds
+          // the reserved capacity of ExprMemory, it will reallocate and cause
+          // memory corruption on the OpaqueValueExpr. See ROOT-7749.
           clang::QualType NonRefQT(QT.getNonReferenceType());
           ExprMemory.resize(++nargs);
-          new (&ExprMemory[nargs-1]) OpaqueValueExpr(TSI->getTypeLoc().getLocStart(),
+          new (&ExprMemory[nargs-1]) OpaqueValueExpr(TSI->getTypeLoc().getBeginLoc(),
                                                      NonRefQT, VK);
         }
         // Type names should be comma separated.

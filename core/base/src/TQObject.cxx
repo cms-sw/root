@@ -52,25 +52,22 @@ as an identifier of the modifier method.
 General purpose message signal
 */
 
-#include "Varargs.h"
 #include "TQObject.h"
 #include "TQConnection.h"
 #include "THashList.h"
 #include "TPRegexp.h"
 #include "TROOT.h"
+#include "TBuffer.h"
 #include "TClass.h"
-#include "TSystem.h"
 #include "TMethod.h"
 #include "TBaseClass.h"
 #include "TDataType.h"
 #include "TInterpreter.h"
 #include "TQClass.h"
 #include "TError.h"
-#include "Riostream.h"
+#include <iostream>
 #include "RQ_OBJECT.h"
 #include "TVirtualMutex.h"
-#include "Varargs.h"
-#include "TInterpreter.h"
 #include "RConfigure.h"
 
 void *gTQSender; // A pointer to the object that sent the last signal.
@@ -174,7 +171,7 @@ static TMethod *GetMethod(TClass *cl, const char *method, const char *params)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Checking of consitency of sender/receiver methods/arguments.
+/// Checking of consistency of sender/receiver methods/arguments.
 /// Returns -1 on error, otherwise number or arguments of signal function.
 /// Static method.
 
@@ -476,6 +473,7 @@ void TQObject::CollectClassSignalLists(TList& list, TClass* cls)
 
 void TQObject::HighPriority(const char *signal_name, const char *slot_name)
 {
+   if (!fListOfSignals) return;
    TQConnectionList *clist = (TQConnectionList*)
       fListOfSignals->FindObject(signal_name);
 
@@ -502,6 +500,7 @@ void TQObject::HighPriority(const char *signal_name, const char *slot_name)
 
 void TQObject::LowPriority(const char *signal_name, const char *slot_name)
 {
+   if (!fListOfSignals) return;
    TQConnectionList *clist = (TQConnectionList*)
       fListOfSignals->FindObject(signal_name);
 
@@ -572,7 +571,7 @@ Bool_t TQObject::ConnectToClass(TQObject *sender,
    TString signal_name = CompressName(signal);
    TString slot_name   = CompressName(slot);
 
-   // check consitency of signal/slot methods/args
+   // check consistency of signal/slot methods/args
    Int_t nsigargs;
    if ((nsigargs = CheckConnectArgs(sender, sender->IsA(), signal_name, cl, slot_name)) == -1)
       return kFALSE;
@@ -630,7 +629,7 @@ Bool_t TQObject::ConnectToClass(const char *class_name,
    TString signal_name = CompressName(signal);
    TString slot_name   = CompressName(slot);
 
-   // check consitency of signal/slot methods/args
+   // check consistency of signal/slot methods/args
    Int_t nsigargs;
    if ((nsigargs = CheckConnectArgs(0, sender, signal_name, cl, slot_name)) == -1)
       return kFALSE;
@@ -720,7 +719,7 @@ Bool_t TQObject::Connect(TQObject *sender,
    TString signal_name = CompressName(signal);
    TString slot_name   = CompressName(slot);
 
-   // check consitency of signal/slot methods/args
+   // check consistency of signal/slot methods/args
    Int_t nsigargs;
    if ((nsigargs = CheckConnectArgs(sender, sender->IsA(), signal_name, 0, slot_name)) == -1)
       return kFALSE;
@@ -816,7 +815,7 @@ Bool_t TQObject::Connect(const char *class_name,
    TString signal_name = CompressName(signal);
    TString slot_name   = CompressName(slot);
 
-   // check consitency of signal/slot methods/args
+   // check consistency of signal/slot methods/args
    Int_t nsigargs;
    if ((nsigargs = CheckConnectArgs(0, sender, signal_name, 0, slot_name)) == -1)
       return kFALSE;
@@ -873,7 +872,7 @@ Bool_t TQObject::Connect(const char *signal,
    TString signal_name = CompressName(signal);
    TString slot_name   = CompressName(slot);
 
-   // check consitency of signal/slot methods/args
+   // check consistency of signal/slot methods/args
    TClass *cl = 0;
    if (receiver_class)
       cl = TClass::GetClass(receiver_class);
@@ -1011,7 +1010,7 @@ Bool_t TQObject::Disconnect(const char *class_name,
    TClass *sender = TClass::GetClass(class_name);
 
    // sender should be TQClass (which derives from TQObject)
-   if (!sender->IsA()->InheritsFrom(TQObject::Class()))
+   if (!sender || !sender->IsA()->InheritsFrom(TQObject::Class()))
       return kFALSE;
 
    TQClass *qcl = (TQClass*)sender;   // cast TClass to TQClass

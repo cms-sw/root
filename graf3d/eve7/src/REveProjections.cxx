@@ -1,8 +1,8 @@
-// @(#)root/eve:$Id$
+// @(#)root/eve7:$Id$
 // Authors: Matevz Tadel & Alja Mrak-Tadel: 2006, 2007
 
 /*************************************************************************
- * Copyright (C) 1995-2007, Rene Brun and Fons Rademakers.               *
+ * Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
@@ -18,7 +18,6 @@
 #include <limits>
 
 using namespace ROOT::Experimental;
-namespace REX = ROOT::Experimental;
 
 /** \class REveProjection
 \ingroup REve
@@ -28,8 +27,8 @@ Enables to define an external center of distortion and a scale to
 fixate a bounding box of a projected point.
 */
 
-Float_t REX::REveProjection::fgEps    = 0.005f;
-Float_t REX::REveProjection::fgEpsSqr = 0.000025f;
+Float_t REveProjection::fgEps    = 0.005f;
+Float_t REveProjection::fgEpsSqr = 0.000025f;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Constructor.
@@ -37,7 +36,7 @@ Float_t REX::REveProjection::fgEpsSqr = 0.000025f;
 REveProjection::REveProjection() :
    fType          (kPT_Unknown),
    fGeoMode       (kGM_Unknown),
-   fName          (0),
+   fName          (),
    fCenter        (),
    fDisplaceOrigin (kFALSE),
    fUsePreScale   (kFALSE),
@@ -137,7 +136,7 @@ void REveProjection::PreScaleVariable(Int_t dim, Float_t& v)
          v    = -v;
          invp = kTRUE;
       }
-      vPreScale_i i = fPreScales[dim].begin();
+      auto i = fPreScales[dim].begin();
       while (v > i->fMax)
          ++i;
       v = i->fOffset + (v - i->fMin)*i->fScale;

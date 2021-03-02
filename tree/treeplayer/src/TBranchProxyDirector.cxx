@@ -22,12 +22,10 @@ which will hold the directory and its associate
 #include "TTree.h"
 #include "TEnv.h"
 #include "TH1F.h"
-#include "TPad.h"
+#include "TVirtualPad.h"
 #include "TList.h"
 
 #include <algorithm>
-
-namespace std {} using namespace std;
 
 ClassImp(ROOT::Internal::TBranchProxyDirector);
 
@@ -136,17 +134,20 @@ namespace Internal {
 
       TTree* oldtree = fTree;
       fTree = newtree;
-      Notify();
+      if(!Notify()) return nullptr;
       return oldtree;
    }
 
    Bool_t TBranchProxyDirector::Notify() {
       fEntry = -1;
-
+      bool retVal = true;
       for_each(fDirected.begin(),fDirected.end(),NotifyDirected);
+      for (auto brProxy : fDirected) {
+         retVal = retVal && brProxy->Notify();
+      }
       Update update(fTree);
       for_each(fFriends.begin(),fFriends.end(),update);
-      return kTRUE;
+      return retVal;
    }
 
 } // namespace Internal

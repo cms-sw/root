@@ -1,8 +1,8 @@
-// @(#)root/eve:$Id$
+// @(#)root/eve7:$Id$
 // Authors: Matevz Tadel & Alja Mrak-Tadel: 2006, 2007
 
 /*************************************************************************
- * Copyright (C) 1995-2007, Rene Brun and Fons Rademakers.               *
+ * Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
@@ -12,13 +12,10 @@
 #ifndef ROOT7_REveUtil
 #define ROOT7_REveUtil
 
-#include "TObject.h"
-#include "TString.h"
+#include "REveTypes.hxx"
+
 #include "TError.h"
 
-#include "GuiTypes.h"
-
-#include <list>
 #include <map>
 #include <set>
 #include <exception>
@@ -28,13 +25,19 @@ class TGeoManager;
 namespace ROOT {
 namespace Experimental {
 
+class RLogChannel;
+/// Log channel for Eve diagnostics.
+RLogChannel &EveLog();
+
 class REveElement;
 
-/******************************************************************************/
-// REveUtil
-/******************************************************************************/
+////////////////////////////////////////////////////////////////////////////////
+/// REveUtil
+/// Standard utility functions for Reve.
+////////////////////////////////////////////////////////////////////////////////
 
-class REveUtil {
+class REveUtil
+{
 private:
    static TObjArray *fgDefaultColors;
 
@@ -66,8 +69,6 @@ public:
    static Bool_t IsU1IntervalOverlappingByMeanDelta(Float_t meanM, Float_t deltaM, Float_t meanQ, Float_t deltaQ);
 
    static Float_t GetFraction(Float_t minM, Float_t maxM, Float_t minQ, Float_t maxQ);
-
-   ClassDef(REveUtil, 0); // Standard utility functions for Reve.
 };
 
 inline Bool_t REveUtil::IsU1IntervalContainedByMeanDelta(Float_t meanM, Float_t deltaM, Float_t meanQ, Float_t deltaQ)
@@ -80,36 +81,14 @@ inline Bool_t REveUtil::IsU1IntervalOverlappingByMeanDelta(Float_t meanM, Float_
    return IsU1IntervalContainedByMinMax(meanM - deltaM, meanM + deltaM, meanQ - deltaQ, meanQ + deltaQ);
 }
 
-/******************************************************************************/
-// Exceptions, string functions
-/******************************************************************************/
 
-bool operator==(const TString &t, const std::string &s);
-bool operator==(const std::string &s, const TString &t);
+////////////////////////////////////////////////////////////////////////////////
+/// REveGeoManagerHolder
+/// Exception-safe global variable holders
+////////////////////////////////////////////////////////////////////////////////
 
-class REveException : public std::exception, public TString {
-public:
-   REveException() {}
-   REveException(const TString &s) : TString(s) {}
-   REveException(const char *s) : TString(s) {}
-   REveException(const std::string &s);
-
-   virtual ~REveException() noexcept {}
-
-   virtual const char *what() const noexcept { return Data(); }
-
-   ClassDef(REveException, 1); // Exception-type thrown by Eve classes.
-};
-
-REveException operator+(const REveException &s1, const std::string &s2);
-REveException operator+(const REveException &s1, const TString &s2);
-REveException operator+(const REveException &s1, const char *s2);
-
-/******************************************************************************/
-// Exception-safe global variable holders
-/******************************************************************************/
-
-class REveGeoManagerHolder {
+class REveGeoManagerHolder
+{
 private:
    TGeoManager *fManager{nullptr};  ///<!  hold manager
    Int_t fNSegments{0};             ///<!  previous settings for num segments
@@ -119,16 +98,18 @@ public:
    ~REveGeoManagerHolder();
 };
 
-/******************************************************************************/
-// REveRefCnt base-class (interface)
-/******************************************************************************/
+////////////////////////////////////////////////////////////////////////////////
+/// REveRefCnt
+/// REveRefCnt base-class (interface)
+////////////////////////////////////////////////////////////////////////////////
 
-class REveRefCnt {
+class REveRefCnt
+{
 protected:
-   Int_t fRefCount;
+   Int_t fRefCount{0};
 
 public:
-   REveRefCnt() : fRefCount(0) {}
+   REveRefCnt() = default;
    virtual ~REveRefCnt() {}
 
    REveRefCnt(const REveRefCnt &) : fRefCount(0) {}
@@ -142,18 +123,17 @@ public:
    }
 
    virtual void OnZeroRefCount() { delete this; }
-
-   ClassDef(REveRefCnt, 0); // Base-class for reference-counted objects.
 };
 
-/******************************************************************************/
-// REveRefBackPtr reference-count with back pointers
-/******************************************************************************/
+////////////////////////////////////////////////////////////////////////////////
+/// REveRefBackPtr
+/// reference-count with back pointers
+////////////////////////////////////////////////////////////////////////////////
 
-class REveRefBackPtr : public REveRefCnt {
+class REveRefBackPtr : public REveRefCnt
+{
 protected:
    typedef std::map<REveElement *, Int_t> RefMap_t;
-   typedef RefMap_t::iterator RefMap_i;
 
    RefMap_t fBackRefs;
 
@@ -170,9 +150,6 @@ public:
    virtual void DecRefCount(REveElement *re);
 
    virtual void StampBackPtrElements(UChar_t stamps);
-
-   ClassDef(REveRefBackPtr,
-            0); // Base-class for reference-counted objects with reverse references to REveElement objects.
 };
 
 } // namespace Experimental

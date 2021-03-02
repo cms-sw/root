@@ -14,6 +14,7 @@
 
 #include "TH2Poly.h"
 #include "TProfile.h"
+#include <vector>
 
 class TProfile2PolyBin : public TH2PolyBin {
 public:
@@ -111,6 +112,6 @@ protected:
    Int_t OverflowIdxToArrayIdx(Int_t val) { return -val - 1; }
 
 
-   ClassDefOverride(TProfile2Poly, 1)
+   ClassDefOverride(TProfile2Poly, 2)
 };
 #endif

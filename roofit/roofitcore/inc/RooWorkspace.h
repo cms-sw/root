@@ -131,6 +131,15 @@ public:
 
   Bool_t writeToFile(const char* fileName, Bool_t recreate=kTRUE) ;
 
+  /// Make internal collection use an unordered_map for
+  /// faster searching. Important when large trees are
+  /// imported / or modified in the workspace.
+  /// Note that RooAbsCollection may eventually switch
+  /// this on by itself.
+  void useFindsWithHashLookup(bool flag) {
+    _allOwnedNodes.useHashMapForFind(flag);
+  }
+
   virtual void RecursiveRemove(TObject *obj);
 
   // Tools management
@@ -221,13 +230,8 @@ public:
     virtual ~WSDir() { Clear("nodelete") ; } ; 
 
 
-#if ROOT_VERSION_CODE <= 332546
-    virtual void Add(TObject*) ;
-    virtual void Append(TObject*) ;
-#else 
     virtual void Add(TObject*,Bool_t) ; 
     virtual void Append(TObject*,Bool_t) ; 
-#endif 
 
   protected:
     friend class RooWorkspace ;

@@ -1,7 +1,7 @@
 // Author:  Sergey Linev, GSI  29/06/2017
 
 /*************************************************************************
- * Copyright (C) 1995-2018, Rene Brun and Fons Rademakers.               *
+ * Copyright (C) 1995-2021, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
@@ -16,12 +16,16 @@
 
 #include <string>
 #include <vector>
+#include <memory>
 
 class TClass;
 
 /** \class TWebMenuItem
-  Class contains info for producing menu item on the JS side.
-  */
+\ingroup webgui6
+
+Class contains info for producing menu item on the JS side.
+
+*/
 
 class TWebMenuItem {
 protected:
@@ -103,18 +107,21 @@ public:
    /** virtual destructor need for vtable, used when vector of TMenuItem* is stored */
    virtual ~TWebArgsMenuItem() = default;
 
-   void AddArg(const TWebMenuArgument &arg) { fArgs.push_back(arg); }
+   std::vector<TWebMenuArgument> &GetArgs() { return fArgs; }
+
 };
 
 ///////////////////////////////////////////////////////////////////////
 
 class TWebMenuItems {
 protected:
-   std::vector<TWebMenuItem *> fItems; ///< list of items in the menu
+   std::string fId;                                   ///< object identifier
+   std::vector<std::unique_ptr<TWebMenuItem>> fItems; ///< list of items in the menu
 public:
-   ~TWebMenuItems() { Cleanup(); }
+   TWebMenuItems() = default;
+   TWebMenuItems(const std::string &snapid) : fId(snapid) {}
 
-   void Add(TWebMenuItem *item) { fItems.push_back(item); }
+   void Add(TWebMenuItem *item) { fItems.emplace_back(item); }
 
    void AddMenuItem(const std::string &name, const std::string &title, const std::string &exec, TClass *cl = nullptr)
    {
@@ -134,11 +141,7 @@ public:
 
    std::size_t Size() const { return fItems.size(); }
 
-   void Cleanup();
-
    void PopulateObjectMenu(void *obj, TClass *cl);
-
-   TString ProduceJSON();
 };
 
 #endif

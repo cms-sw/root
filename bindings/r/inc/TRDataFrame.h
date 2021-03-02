@@ -1,9 +1,9 @@
 // @(#)root/r:$Id$
-// Author: Omar Zapata   30/05/2015
+// Author: Omar Zapata  Omar.Zapata@cern.ch   30/05/2015
 
 
 /*************************************************************************
- * Copyright (C) 2013-2015, Omar Andres Zapata Mesa                      *
+ * Copyright (C) 1995-2021, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
@@ -136,7 +136,7 @@ namespace ROOT {
          2 |1
       \endcode
 
-      </h2>Working with colunms between dataframes</h2><br>
+      <h2>Working with colunms between dataframes</h2><br>
       \code{.cpp}
       df2["v3"]<<df1["strings"];
 

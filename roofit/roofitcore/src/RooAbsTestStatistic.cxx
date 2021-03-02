@@ -34,11 +34,9 @@ partitions in parallel executing processes and a posteriori
 combined in the main thread.
 **/
 
+#include "RooAbsTestStatistic.h"
 
 #include "RooFit.h"
-#include "Riostream.h"
-
-#include "RooAbsTestStatistic.h"
 #include "RooAbsPdf.h"
 #include "RooSimultaneous.h"
 #include "RooAbsData.h"
@@ -48,10 +46,14 @@ combined in the main thread.
 #include "RooRealMPFE.h"
 #include "RooErrorHandler.h"
 #include "RooMsgService.h"
-#include "TTimeStamp.h"
 #include "RooProdPdf.h"
 #include "RooRealSumPdf.h"
+#include "RooAbsCategoryLValue.h"
+
+#include "TTimeStamp.h"
+#include "TClass.h"
 #include <string>
+#include <stdexcept>
 
 using namespace std;
 
@@ -72,18 +74,29 @@ RooAbsTestStatistic::RooAbsTestStatistic() :
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Constructor taking function (real), a dataset (data), a set of projected observables (projSet). If
-/// rangeName is not null, only events in the dataset inside the range will be used in the test
-/// statistic calculation. If addCoefRangeName is not null, all RooAddPdf component of 'real' will be
-/// instructed to fix their fraction definitions to the given named range. If nCPU is greater than
-/// 1 the test statistic calculation will be paralellized over multiple processes. By default the data
-/// is split with 'bulk' partitioning (each process calculates a contigious block of fraction 1/nCPU
+/// Create a test statistic from the given function and the data.
+/// \param[in] name Name of the test statistic
+/// \param[in] title Title (for plotting)
+/// \param[in] real Function to be used for tests
+/// \param[in] data Data to fit function to
+/// \param[in] projDeps A set of projected observables
+/// \param[in] rangeName Fit data only in range with given name
+/// \param[in] addCoefRangeName If not null, all RooAddPdf components of `real` will be instructed to fix their fraction definitions to the given named range.
+/// \param[in] nCPU If larger than one, the test statistic calculation will be parallelized over multiple processes.
+/// By default the data is split with 'bulk' partitioning (each process calculates a contigious block of fraction 1/nCPU
 /// of the data). For binned data this approach may be suboptimal as the number of bins with >0 entries
 /// in each processing block many vary greatly thereby distributing the workload rather unevenly.
-/// If interleave is set to true, the interleave partitioning strategy is used where each partition
+/// \param[in] interleave is set to true, the interleave partitioning strategy is used where each partition
 /// i takes all bins for which (ibin % ncpu == i) which is more likely to result in an even workload.
-/// If splitCutRange is true, a different rangeName constructed as rangeName_{catName} will be used
-/// as range definition for each index state of a RooSimultaneous
+/// \param[in] verbose Be more verbose.
+/// \param[in] splitCutRange If true, a different rangeName constructed as rangeName_{catName} will be used
+/// as range definition for each index state of a RooSimultaneous. This means that a different range can be defined
+/// for each category such as
+/// ```
+/// myVariable.setRange("range_pi0", 135, 210);
+/// myVariable.setRange("range_gamma", 50, 210);
+/// ```
+/// if the categories are called "pi0" and "gamma".
 
 RooAbsTestStatistic::RooAbsTestStatistic(const char *name, const char *title, RooAbsReal& real, RooAbsData& data,
 					 const RooArgSet& projDeps, const char* rangeName, const char* addCoefRangeName,
@@ -223,11 +236,11 @@ RooAbsTestStatistic::~RooAbsTestStatistic()
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// Calculates and return value of test statistic. If the test statistic
-/// is calculated from on a RooSimultaneous, the test statistic calculation
+/// Calculate and return value of test statistic. If the test statistic
+/// is calculated from a RooSimultaneous, the test statistic calculation
 /// is performed separately on each simultaneous p.d.f component and associated
-/// data and then combined. If the test statistic calculation is parallelized
-/// partitions are calculated in nCPU processes and a posteriori combined.
+/// data, and then combined. If the test statistic calculation is parallelized,
+/// partitions are calculated in nCPU processes and combined a posteriori.
 
 Double_t RooAbsTestStatistic::evaluate() const
 {
@@ -312,7 +325,7 @@ Double_t RooAbsTestStatistic::evaluate() const
       break ;
       
     case RooFit::Hybrid:
-      throw(std::string("this should never happen")) ;
+      throw std::logic_error("this should never happen");
       break ;
     }
 
@@ -488,25 +501,23 @@ void RooAbsTestStatistic::initSimMode(RooSimultaneous* simpdf, RooAbsData* data,
 				      const RooArgSet* projDeps, const char* rangeName, const char* addCoefRangeName)
 {
 
-  RooAbsCategoryLValue& simCat = (RooAbsCategoryLValue&) simpdf->indexCat();
+  RooAbsCategoryLValue& simCat = const_cast<RooAbsCategoryLValue&>(simpdf->indexCat());
 
   TString simCatName(simCat.GetName());
   TList* dsetList = const_cast<RooAbsData*>(data)->split(simCat,processEmptyDataSets());
   if (!dsetList) {
     coutE(Fitting) << "RooAbsTestStatistic::initSimMode(" << GetName() << ") ERROR: index category of simultaneous pdf is missing in dataset, aborting" << endl;
-    throw std::string("RooAbsTestStatistic::initSimMode() ERROR, index category of simultaneous pdf is missing in dataset, aborting");
-    //RooErrorHandler::softAbort() ;
+    throw std::runtime_error("RooAbsTestStatistic::initSimMode() ERROR, index category of simultaneous pdf is missing in dataset, aborting");
   }
 
   // Count number of used states
   Int_t n = 0;
   _nGof = 0;
-  RooCatType* type;
-  TIterator* catIter = simCat.typeIterator();
-  while ((type = (RooCatType*) catIter->Next())) {
+
+  for (const auto& catState : simCat) {
     // Retrieve the PDF for this simCat state
-    RooAbsPdf* pdf = simpdf->getPdf(type->GetName());
-    RooAbsData* dset = (RooAbsData*) dsetList->FindObject(type->GetName());
+    RooAbsPdf* pdf = simpdf->getPdf(catState.first.c_str());
+    RooAbsData* dset = (RooAbsData*) dsetList->FindObject(catState.first.c_str());
 
     if (pdf && dset && (0. != dset->sumEntries() || processEmptyDataSets())) {
       ++_nGof;
@@ -518,64 +529,64 @@ void RooAbsTestStatistic::initSimMode(RooSimultaneous* simpdf, RooAbsData* data,
   _gofSplitMode.resize(_nGof);
 
   // Create array of regular fit contexts, containing subset of data and single fitCat PDF
-  catIter->Reset();
-  while ((type = (RooCatType*) catIter->Next())) {
+  for (const auto& catState : simCat) {
+    const std::string& catName = catState.first;
     // Retrieve the PDF for this simCat state
-    RooAbsPdf* pdf = simpdf->getPdf(type->GetName());
-    RooAbsData* dset = (RooAbsData*) dsetList->FindObject(type->GetName());
+    RooAbsPdf* pdf = simpdf->getPdf(catName.c_str());
+    RooAbsData* dset = (RooAbsData*) dsetList->FindObject(catName.c_str());
 
     if (pdf && dset && (0. != dset->sumEntries() || processEmptyDataSets())) {
-      ccoutI(Fitting) << "RooAbsTestStatistic::initSimMode: creating slave calculator #" << n << " for state " << type->GetName()
-		     << " (" << dset->numEntries() << " dataset entries)" << endl;
+      ccoutI(Fitting) << "RooAbsTestStatistic::initSimMode: creating slave calculator #" << n << " for state " << catName
+          << " (" << dset->numEntries() << " dataset entries)" << endl;
 
-      
+
       // *** START HERE
       // WVE HACK determine if we have a RooRealSumPdf and then treat it like a binned likelihood
       RooAbsPdf* binnedPdf = 0 ;
       Bool_t binnedL = kFALSE ;
       if (pdf->getAttribute("BinnedLikelihood") && pdf->IsA()->InheritsFrom(RooRealSumPdf::Class())) {
-	// Simplest case: top-level of component is a RRSP
-	binnedPdf = pdf ;
-	binnedL = kTRUE ;
+        // Simplest case: top-level of component is a RRSP
+        binnedPdf = pdf ;
+        binnedL = kTRUE ;
       } else if (pdf->IsA()->InheritsFrom(RooProdPdf::Class())) {
-	// Default case: top-level pdf is a product of RRSP and other pdfs
-	RooFIter iter = ((RooProdPdf*)pdf)->pdfList().fwdIterator() ;
-	RooAbsArg* component ;
-	while ((component = iter.next())) {
-	  if (component->getAttribute("BinnedLikelihood") && component->IsA()->InheritsFrom(RooRealSumPdf::Class())) {
-	    binnedPdf = (RooAbsPdf*) component ;
-	    binnedL = kTRUE ;
-	  }
-	  if (component->getAttribute("MAIN_MEASUREMENT")) {
-	    // not really a binned pdf, but this prevents a (potentially) long list of subsidiary measurements to be passed to the slave calculator
-	    binnedPdf = (RooAbsPdf*) component ;
-	  }
-	}
+        // Default case: top-level pdf is a product of RRSP and other pdfs
+        RooFIter iter = ((RooProdPdf*)pdf)->pdfList().fwdIterator() ;
+        RooAbsArg* component ;
+        while ((component = iter.next())) {
+          if (component->getAttribute("BinnedLikelihood") && component->IsA()->InheritsFrom(RooRealSumPdf::Class())) {
+            binnedPdf = (RooAbsPdf*) component ;
+            binnedL = kTRUE ;
+          }
+          if (component->getAttribute("MAIN_MEASUREMENT")) {
+            // not really a binned pdf, but this prevents a (potentially) long list of subsidiary measurements to be passed to the slave calculator
+            binnedPdf = (RooAbsPdf*) component ;
+          }
+        }
       }
       // WVE END HACK
       // Below here directly pass binnedPdf instead of PROD(binnedPdf,constraints) as constraints are evaluated elsewhere anyway
       // and omitting them reduces model complexity and associated handling/cloning times
       if (_splitRange && rangeName) {
-	_gofArray[n] = create(type->GetName(),type->GetName(),(binnedPdf?*binnedPdf:*pdf),*dset,*projDeps,
-			      Form("%s_%s",rangeName,type->GetName()),addCoefRangeName,_nCPU*(_mpinterl?-1:1),_mpinterl,_verbose,_splitRange,binnedL);
+        _gofArray[n] = create(catName.c_str(), catName.c_str(),(binnedPdf?*binnedPdf:*pdf),*dset,*projDeps,
+            Form("%s_%s",rangeName,catName.c_str()),addCoefRangeName,_nCPU*(_mpinterl?-1:1),_mpinterl,_verbose,_splitRange,binnedL);
       } else {
-	_gofArray[n] = create(type->GetName(),type->GetName(),(binnedPdf?*binnedPdf:*pdf),*dset,*projDeps,
-			      rangeName,addCoefRangeName,_nCPU,_mpinterl,_verbose,_splitRange,binnedL);
+        _gofArray[n] = create(catName.c_str(),catName.c_str(),(binnedPdf?*binnedPdf:*pdf),*dset,*projDeps,
+            rangeName,addCoefRangeName,_nCPU,_mpinterl,_verbose,_splitRange,binnedL);
       }
       _gofArray[n]->setSimCount(_nGof);
       // *** END HERE
 
       // Fill per-component split mode with Bulk Partition for now so that Auto will map to bulk-splitting of all components
       if (_mpinterl==RooFit::Hybrid) {
-	if (dset->numEntries()<10) {
-	  //cout << "RAT::initSim("<< GetName() << ") MP mode is auto, setting split mode for component "<< n << " to SimComponents"<< endl ;
-	  _gofSplitMode[n] = RooFit::SimComponents;
-	  _gofArray[n]->_mpinterl = RooFit::SimComponents;
-	} else {
-	  //cout << "RAT::initSim("<< GetName() << ") MP mode is auto, setting split mode for component "<< n << " to BulkPartition"<< endl ;
-	  _gofSplitMode[n] = RooFit::BulkPartition;
-	  _gofArray[n]->_mpinterl = RooFit::BulkPartition;
-	}
+        if (dset->numEntries()<10) {
+          //cout << "RAT::initSim("<< GetName() << ") MP mode is auto, setting split mode for component "<< n << " to SimComponents"<< endl ;
+          _gofSplitMode[n] = RooFit::SimComponents;
+          _gofArray[n]->_mpinterl = RooFit::SimComponents;
+        } else {
+          //cout << "RAT::initSim("<< GetName() << ") MP mode is auto, setting split mode for component "<< n << " to BulkPartition"<< endl ;
+          _gofSplitMode[n] = RooFit::BulkPartition;
+          _gofArray[n]->_mpinterl = RooFit::BulkPartition;
+        }
       }
 
       // Servers may have been redirected between instantiation and (deferred) initialization
@@ -592,27 +603,25 @@ void RooAbsTestStatistic::initSimMode(RooSimultaneous* simpdf, RooAbsData* data,
 
     } else {
       if ((!dset || (0. != dset->sumEntries() && !processEmptyDataSets())) && pdf) {
-	if (_verbose) {
-	  ccoutD(Fitting) << "RooAbsTestStatistic::initSimMode: state " << type->GetName()
-			 << " has no data entries, no slave calculator created" << endl;
-	}
+        if (_verbose) {
+          ccoutD(Fitting) << "RooAbsTestStatistic::initSimMode: state " << catName
+              << " has no data entries, no slave calculator created" << endl;
+        }
       }
     }
   }
   coutI(Fitting) << "RooAbsTestStatistic::initSimMode: created " << n << " slave calculators." << endl;
-  
+
   dsetList->Delete(); // delete the content.
   delete dsetList;
-  delete catIter;
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Change dataset that is used to given one. If cloneData is kTRUE, a clone of
 /// in the input dataset is made.  If the test statistic was constructed with
-/// a range specification on the data, the cloneData argument is ignore and
+/// a range specification on the data, the cloneData argument is ignored and
 /// the data is always cloned.
-
 Bool_t RooAbsTestStatistic::setData(RooAbsData& indata, Bool_t cloneData) 
 { 
   // Trigger refresh of likelihood offsets 
@@ -639,24 +648,30 @@ Bool_t RooAbsTestStatistic::setData(RooAbsData& indata, Bool_t cloneData)
 	_gofArray[i]->setDataSlave(indata, cloneData);
       }
     } else {
-//       cout << "NONEMPTY DATASET WITHOUT FAST SPLIT SUPPORT! "<< indata.GetName() << endl;
-      const RooAbsCategoryLValue* indexCat = & ((RooSimultaneous*)_func)->indexCat();
-      TList* dlist = indata.split(*indexCat, kTRUE);
+      const RooAbsCategoryLValue& indexCat = static_cast<RooSimultaneous*>(_func)->indexCat();
+      TList* dlist = indata.split(indexCat, kTRUE);
+      if (!dlist) {
+        coutF(DataHandling) << "Tried to split '" << indata.GetName() << "' into categories of '" << indexCat.GetName()
+            << "', but splitting failed. Input data:" << std::endl;
+        indata.Print("V");
+        throw std::runtime_error("Error when setting up test statistic: dataset couldn't be split into categories.");
+      }
+
       for (Int_t i = 0; i < _nGof; ++i) {
-	RooAbsData* compData = (RooAbsData*) dlist->FindObject(_gofArray[i]->GetName());
-	// 	cout << "component data for index " << _gofArray[i]->GetName() << " is " << compData << endl;
-	if (compData) {
-	  _gofArray[i]->setDataSlave(*compData,kFALSE,kTRUE);
-	} else {
-	  coutE(DataHandling) << "RooAbsTestStatistic::setData(" << GetName() << ") ERROR: Cannot find component data for state " << _gofArray[i]->GetName() << endl;
-	}
+        RooAbsData* compData = (RooAbsData*) dlist->FindObject(_gofArray[i]->GetName());
+        // 	cout << "component data for index " << _gofArray[i]->GetName() << " is " << compData << endl;
+        if (compData) {
+          _gofArray[i]->setDataSlave(*compData,kFALSE,kTRUE);
+        } else {
+          coutE(DataHandling) << "RooAbsTestStatistic::setData(" << GetName() << ") ERROR: Cannot find component data for state " << _gofArray[i]->GetName() << endl;
+        }
       }
     }
     break;
   case MPMaster:
     // Not supported
     coutF(DataHandling) << "RooAbsTestStatistic::setData(" << GetName() << ") FATAL: setData() is not supported in multi-processor mode" << endl;
-    throw string("RooAbsTestStatistic::setData is not supported in MPMaster mode");
+    throw std::runtime_error("RooAbsTestStatistic::setData is not supported in MPMaster mode");
     break;
   }
 

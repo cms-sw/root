@@ -21,12 +21,15 @@
 
 #include "TXMLEngine.h"
 
-#include "Riostream.h"
 #include "TString.h"
 #include "TNamed.h"
 #include "TObjArray.h"
-#include <stdlib.h>
-#include <string.h>
+#include "strlcpy.h"
+#include "snprintf.h"
+
+#include <fstream>
+#include <cstdlib>
+#include <cstring>
 
 ClassImp(TXMLEngine);
 
@@ -270,17 +273,19 @@ public:
    {
       if (EndOfFile())
          return 0;
+
+      int resultsize = 0;
       if (fInp != 0) {
          fInp->get(buf, maxsize, 0);
-         maxsize = strlen(buf);
+         resultsize = strlen(buf);
       } else {
-         if (maxsize > fInpStrLen)
-            maxsize = fInpStrLen;
-         strncpy(buf, fInpStr, maxsize);
-         fInpStr += maxsize;
-         fInpStrLen -= maxsize;
+         resultsize = strlcpy(buf, fInpStr, maxsize);
+         if (resultsize >= maxsize)
+            resultsize = maxsize - 1;
+         fInpStr += resultsize;
+         fInpStrLen -= resultsize;
       }
-      return maxsize;
+      return resultsize;
    }
 
    ////////////////////////////////////////////////////////////////////////////
@@ -404,12 +409,11 @@ public:
 
       char *curr = fCurrent;
 
-      do {
-         curr++;
+      while(true) {
          while (curr + len > fMaxAddr)
             if (!ExpandStream(curr))
                return -1;
-         char *chk0 = curr;
+         const char *chk0 = curr;
          const char *chk = str;
          Bool_t find = kTRUE;
          while (*chk != 0)
@@ -420,7 +424,8 @@ public:
          // if string found, shift to the next symbol after string
          if (find)
             return curr - fCurrent;
-      } while (curr < fMaxAddr);
+         curr++;
+      }
       return -1;
    }
 
@@ -1781,7 +1786,7 @@ XMLNodePointer_t TXMLEngine::ReadNode(XMLNodePointer_t xmlparent, TXMLInputStrea
    // process comments before we start to analyse any node symbols
    while (inp->CheckFor("<!--")) {
       Int_t commentlen = inp->SearchFor("-->");
-      if (commentlen <= 0) {
+      if (commentlen < 0) {
          resvalue = -10;
          return 0;
       }

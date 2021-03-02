@@ -1,3 +1,9 @@
+# Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.
+# All rights reserved.
+#
+# For the licensing terms see $ROOTSYS/LICENSE.
+# For the list of contributors see $ROOTSYS/README/CREDITS.
+
 INCLUDE (CheckCXXSourceCompiles)
 
 #---Define a function to do not polute the top level namespace with unneeded variables-----------------------
@@ -28,7 +34,6 @@ set(ldflags ${CMAKE_CXX_LINK_FLAGS})
 
 set(winrtdebug ${value${winrtdebug}})
 set(exceptions ${value${exceptions}})
-set(explicitlink ${value${explicitlink}})
 
 if(gnuinstall)
   set(prefix ${CMAKE_INSTALL_PREFIX})
@@ -80,6 +85,16 @@ if(IS_ABSOLUTE ${CMAKE_INSTALL_FONTDIR})
 else()
   set(ttffontdir ${prefix}/${CMAKE_INSTALL_FONTDIR})
 endif()
+if(IS_ABSOLUTE ${CMAKE_INSTALL_JSROOTDIR})
+  set(jsrootdir ${CMAKE_INSTALL_JSROOTDIR})
+else()
+  set(jsrootdir ${prefix}/${CMAKE_INSTALL_JSROOTDIR})
+endif()
+if(IS_ABSOLUTE ${CMAKE_INSTALL_OPENUI5DIR})
+  set(openui5dir ${CMAKE_INSTALL_OPENUI5DIR})
+else()
+  set(openui5dir ${prefix}/${CMAKE_INSTALL_OPENUI5DIR})
+endif()
 if(IS_ABSOLUTE ${CMAKE_INSTALL_MACRODIR})
   set(macrodir ${CMAKE_INSTALL_MACRODIR})
 else()
@@ -105,29 +120,19 @@ if(IS_ABSOLUTE ${CMAKE_INSTALL_DOCDIR})
 else()
   set(docdir ${prefix}/${CMAKE_INSTALL_DOCDIR})
 endif()
-if(IS_ABSOLUTE ${CMAKE_INSTALL_TESTDIR})
-  set(testdir ${CMAKE_INSTALL_TESTDIR})
-else()
-  set(testdir ${prefix}/${CMAKE_INSTALL_TESTDIR})
-endif()
 if(IS_ABSOLUTE ${CMAKE_INSTALL_TUTDIR})
   set(tutdir ${CMAKE_INSTALL_TUTDIR})
 else()
   set(tutdir ${prefix}/${CMAKE_INSTALL_TUTDIR})
-endif()
-if(IS_ABSOLUTE ${CMAKE_INSTALL_ACLOCALDIR})
-  set(aclocaldir ${CMAKE_INSTALL_ACLOCALDIR})
-else()
-  set(aclocaldir ${prefix}/${CMAKE_INSTALL_ACLOCALDIR})
 endif()
 
 set(buildx11 ${value${x11}})
 set(x11libdir -L${X11_LIBRARY_DIR})
 set(xpmlibdir -L${X11_LIBRARY_DIR})
 set(xpmlib ${X11_Xpm_LIB})
-set(enable_xft ${value${xft}})
 
-set(enable_thread ${value${thread}})
+set(thread yes)
+set(enable_thread yes)
 set(threadflag ${CMAKE_THREAD_FLAG})
 set(threadlibdir)
 set(threadlib ${CMAKE_THREAD_LIBS_INIT})
@@ -155,11 +160,6 @@ set(builtingl2ps ${value${builtin_gl2ps}})
 set(gl2pslibdir ${GL2PS_LIBRARY_DIR})
 set(gl2pslib ${GL2PS_LIBRARY})
 set(gl2psincdir ${GL2PS_INCLUDE_DIR})
-
-set(buildldap ${value${ldap}})
-set(ldaplibdir ${LDAP_LIBRARY_DIR})
-set(ldaplib ${LDAP_LIBRARY})
-set(ldapincdir ${LDAP_INCLUDE_DIR})
 
 set(buildmysql ${value${mysql}})
 set(mysqllibdir ${MYSQL_LIBRARY_DIR})
@@ -268,10 +268,21 @@ set(fitsiolibdir ${FITSIO_LIBRARY_DIR})
 set(fitsiolib ${FITSIO_LIBRARY})
 set(fitsioincdir ${FITSIO_INCLUDE_DIR})
 
-set(buildpython ${value${python}})
+set(buildgviz ${value${gviz}})
+set(gvizlibdir ${GVIZ_LIBRARY_DIR})
+set(gvizlib ${GVIZ_LIBRARY})
+set(gvizincdir ${GVIZ_INCLUDE_DIR})
+set(gvizcflags)
+
+set(buildpython ${value${pyroot}})
 set(pythonlibdir ${PYTHON_LIBRARY_DIR})
-set(pythonlib ${PYTHON_LIBRARY})
-set(pythonincdir ${PYTHON_INCLUDE_DIR})
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.14)
+  set(pythonlib ${PYTHON_LIBRARIES})
+  set(pythonincdir ${PYTHON_INCLUDE_DIRS})
+else()
+  set(pythonlib ${PYTHON_LIBRARY})
+  set(pythonincdir ${PYTHON_INCLUDE_DIR})
+endif()
 set(pythonlibflags)
 
 set(buildxml ${value${xml}})
@@ -288,18 +299,6 @@ set(xrdversion)
 
 set(alloclib)
 set(alloclibdir)
-
-set(buildkrb5 ${value${krb5}})
-set(krb5libdir ${KRB5_LIBRARY_DIR})
-set(krb5lib ${KRB5_LIBRARY})
-set(krb5incdir ${KRB5_INCLUDE_DIR})
-set(krb5init ${KRB5_INIT})
-
-set(comerrlib)
-set(comerrlibdir)
-set(resolvlib)
-set(cryptolib ${CRYPTLIBS})
-set(cryptolibdir)
 
 set(buildmonalisa ${value${monalisa}})
 set(monalisalibdir ${MONALISA_LIBRARY_DIR})
@@ -318,12 +317,19 @@ set(gslflags)
 
 set(shadowpw ${value${shadowpw}})
 set(buildmathmore ${value${mathmore}})
-set(buildcling ${value${cling}})
 set(buildroofit ${value${roofit}})
 set(buildminuit2 ${value${minuit2}})
 set(buildunuran ${value${unuran}})
 set(buildgdml ${value${gdml}})
 set(buildhttp ${value${http}})
+if(fcgi AND http)
+set(usefastcgi yes)
+set(fastcgiincdir ${FASTCGI_INCLUDE_DIR})
+else()
+set(usefastcgi no)
+set(fcgiincdir)
+endif()
+
 set(buildtmva ${value${tmva}})
 
 set(cursesincdir ${CURSES_INCLUDE_DIR})
@@ -338,16 +344,17 @@ set(dicttype ${ROOT_DICTTYPE})
 find_program(PERL_EXECUTABLE perl)
 set(perl ${PERL_EXECUTABLE})
 
+# --- workaround for Ubuntu 20.04, where snap chrome has problem with arguments translation, to be remove once problem fixed
+find_program(CHROME_EXECUTABLE NAMES chrome PATHS "/snap/chromium/current/usr/lib/chromium-browser/" NO_DEFAULT_PATH)
+
 find_program(CHROME_EXECUTABLE NAMES chrome.exe chromium chromium-browser chrome chrome-browser Google\ Chrome
-             PATHS "$ENV{PROGRAMFILES}/Google/Chrome/Application"
-             "$ENV{PROGRAMFILES\(X86\)}/Google/Chrome/Application")
+             PATH_SUFFIXES "Google/Chrome/Application")
 if(CHROME_EXECUTABLE)
   set(chromeexe ${CHROME_EXECUTABLE})
 endif()
 
 find_program(FIREFOX_EXECUTABLE NAMES firefox firefox.exe
-             PATHS "$ENV{PROGRAMFILES}/Mozilla Firefox"
-             "$ENV{PROGRAMFILES\(X86\)}/Mozilla Firefox")
+             PATH_SUFFIXES "Mozilla Firefox")
 if(FIREFOX_EXECUTABLE)
   set(firefoxexe ${FIREFOX_EXECUTABLE})
 endif()
@@ -378,15 +385,10 @@ if(CMAKE_USE_PTHREADS_INIT)
 else()
   set(haspthread undef)
 endif()
-if(xft)
+if(x11)
   set(hasxft define)
 else()
   set(hasxft undef)
-endif()
-if(cling)
-  set(hascling define)
-else()
-  set(hascling undef)
 endif()
 if(lzma)
   set(haslzmacompression define)
@@ -408,6 +410,11 @@ if(vc)
 else()
   set(hasvc undef)
 endif()
+if(vmc)
+  set(hasvmc define)
+else()
+  set(hasvmc undef)
+endif()
 if(vdt)
   set(hasvdt define)
 else()
@@ -418,19 +425,29 @@ if(veccore)
 else()
   set(hasveccore undef)
 endif()
+if(dataframe)
+  set(hasdataframe define)
+else()
+  set(hasdataframe undef)
+endif()
+if(dev)
+  set(use_less_includes define)
+else()
+  set(use_less_includes undef)
+endif()
 
-if(compression_default STREQUAL "lz4")
-  set(uselz4 define)
-  set(usezlib undef)
-  set(uselzma undef)
-elseif(compression_default STREQUAL "zlib")
-  set(uselz4 undef)
-  set(usezlib define)
-  set(uselzma undef)
-elseif(compression_default STREQUAL "lzma")
-  set(uselz4 undef)
-  set(usezlib undef)
-  set(uselzma define)
+set(uselz4 undef)
+set(usezlib undef)
+set(uselzma undef)
+set(usezstd undef)
+set(use${compression_default} define)
+
+# cloudflare zlib is available only on x86 and aarch64 platforms with Linux
+# for other platforms we have available builtin zlib 1.2.8
+if(ZLIB_CF)
+  set(usecloudflarezlib define)
+else()
+  set(usecloudflarezlib undef)
 endif()
 if(runtime_cxxmodules)
   set(usecxxmodules define)
@@ -442,8 +459,6 @@ if(libcxx)
 else()
   set(uselibc++ undef)
 endif()
-set(hasllvm undef)
-set(llvmdir /**/)
 if(gcctoolchain)
   set(setgcctoolchain define)
 else()
@@ -474,6 +489,26 @@ if (tmva-gpu)
 else()
   set(hastmvagpu undef)
 endif()
+if (tmva-cudnn)
+   set(hastmvacudnn define)
+else()
+   set(hastmvacudnn undef)
+endif()
+if (tmva-pymva)
+  set(haspymva define)
+else()
+  set(haspymva undef)
+endif()
+if (tmva-rmva)
+  set(hasrmva define)
+else()
+  set(hasrmva undef)
+endif()
+if (uring)
+  set(hasuring define)
+else()
+  set(hasuring undef)
+endif()
 
 # clear cache to allow reconfiguring
 # with a different CMAKE_CXX_STANDARD
@@ -485,10 +520,29 @@ unset(found_stdexpstringview CACHE)
 unset(found_stod_stringview CACHE)
 
 set(hasstdexpstringview undef)
+set(cudahasstdstringview undef)
 CHECK_CXX_SOURCE_COMPILES("#include <string_view>
   int main() { char arr[3] = {'B', 'a', 'r'}; std::string_view strv(arr, sizeof(arr)); return 0;}" found_stdstringview)
 if(found_stdstringview)
   set(hasstdstringview define)
+  if(cuda)
+    if(CUDA_NVCC_EXECUTABLE)
+      if (WIN32)
+        set(PLATFORM_NULL_FILE "nul")
+      else()
+        set(PLATFORM_NULL_FILE "/dev/null")
+      endif()
+      execute_process(
+        COMMAND "echo"
+          "-e" "#include <string_view>\nint main() { char arr[3] = {'B', 'a', 'r'}; std::string_view strv(arr, sizeof(arr)); return 0;}"
+        COMMAND "${CUDA_NVCC_EXECUTABLE}" "-std=c++${CMAKE_CUDA_STANDARD}" "-o" "${PLATFORM_NULL_FILE}" "-x" "c++" "-"
+        RESULT_VARIABLE nvcc_compiled_string_view)
+      unset(PLATFORM_NULL_FILE CACHE)
+      if (nvcc_compiled_string_view EQUAL "0")
+        set(cudahasstdstringview define)
+      endif()
+    endif()
+  endif()
 else()
   set(hasstdstringview undef)
 
@@ -515,6 +569,24 @@ if(found_stod_stringview)
   set(hasstodstringview define)
 else()
   set(hasstodstringview undef)
+endif()
+
+if(found_stdstringview)
+  CHECK_CXX_SOURCE_COMPILES("#include <string>
+     #include <string_view>
+     int main() { std::string s; std::string_view v; s += v; return 0;}" found_opplusequal_stringview)
+elseif(found_stdexpstringview)
+  CHECK_CXX_SOURCE_COMPILES("#include <string>
+     #include <experimental/string_view>
+     int main() { std::string s; std::experimental::string_view v; s += v; return 0;}" found_opplusequal_stringview)
+else()
+  set(found_opplusequal_stringview false)
+endif()
+
+if(found_opplusequal_stringview)
+  set(hasopplusequalstringview define)
+else()
+  set(hasopplusequalstringview undef)
 endif()
 
 CHECK_CXX_SOURCE_COMPILES("#include <tuple>
@@ -554,22 +626,36 @@ else()
    set(has_found_attribute_always_inline undef)
 endif()
 
+CHECK_CXX_SOURCE_COMPILES("
+inline __attribute__((noinline)) bool TestBit(unsigned long f) { return f != 0; };
+int main() { return TestBit(0); }" has_found_attribute_noinline)
+if(has_found_attribute_noinline)
+   set(has_found_attribute_noinline define)
+else()
+   set(has_found_attribute_noinline undef)
+endif()
+
 #---root-config----------------------------------------------------------------------------------------------
 ROOT_GET_OPTIONS(features ENABLED)
-string(REPLACE "c++11" "cxx11" features ${features}) # change the name of the c++11 feature needed for root-config.in
+set(features "cxx${CMAKE_CXX_STANDARD} ${features}")
 set(configfeatures ${features})
 set(configargs ${ROOT_CONFIGARGS})
 set(configoptions ${ROOT_CONFIGARGS})
+set(configstd ${CMAKE_CXX${CMAKE_CXX_STANDARD}_STANDARD_COMPILE_OPTION})
 get_filename_component(altcc ${CMAKE_C_COMPILER} NAME)
 get_filename_component(altcxx ${CMAKE_CXX_COMPILER} NAME)
 get_filename_component(altf77 "${CMAKE_Fortran_COMPILER}" NAME)
 get_filename_component(altld ${CMAKE_CXX_COMPILER} NAME)
 
-set(pythonvers ${PYTHON_VERSION})
+set(pythonvers ${PYTHON_VERSION_STRING_Development_Main})
+set(python${PYTHON_VERSION_MAJOR_Development_Main}vers ${PYTHON_VERSION_STRING_Development_Main})
+if(PYTHON_VERSION_STRING_Development_Other)
+   set(python${PYTHON_VERSION_MAJOR_Development_Other}vers ${PYTHON_VERSION_STRING_Development_Other})
+endif()
 
 #---RConfigure.h---------------------------------------------------------------------------------------------
-configure_file(${PROJECT_SOURCE_DIR}/config/RConfigure.in include/RConfigure.h NEWLINE_STYLE UNIX)
-install(FILES ${CMAKE_BINARY_DIR}/include/RConfigure.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+configure_file(${PROJECT_SOURCE_DIR}/config/RConfigure.in ginclude/RConfigure.h NEWLINE_STYLE UNIX)
+install(FILES ${CMAKE_BINARY_DIR}/ginclude/RConfigure.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 #---Configure and install various files----------------------------------------------------------------------
 execute_Process(COMMAND hostname OUTPUT_VARIABLE BuildNodeInfo OUTPUT_STRIP_TRAILING_WHITESPACE )
@@ -578,11 +664,15 @@ configure_file(${CMAKE_SOURCE_DIR}/config/rootrc.in ${CMAKE_BINARY_DIR}/etc/syst
 configure_file(${CMAKE_SOURCE_DIR}/config/rootauthrc.in ${CMAKE_BINARY_DIR}/etc/system.rootauthrc @ONLY NEWLINE_STYLE UNIX)
 configure_file(${CMAKE_SOURCE_DIR}/config/rootdaemonrc.in ${CMAKE_BINARY_DIR}/etc/system.rootdaemonrc @ONLY NEWLINE_STYLE UNIX)
 
-configure_file(${CMAKE_SOURCE_DIR}/config/RConfigOptions.in include/RConfigOptions.h NEWLINE_STYLE UNIX)
+# file used in TROOT.cxx, not need in include/ dir and not need to install
+configure_file(${CMAKE_SOURCE_DIR}/config/RConfigOptions.in ginclude/RConfigOptions.h NEWLINE_STYLE UNIX)
 
 configure_file(${CMAKE_SOURCE_DIR}/config/Makefile-comp.in config/Makefile.comp NEWLINE_STYLE UNIX)
 configure_file(${CMAKE_SOURCE_DIR}/config/Makefile.in config/Makefile.config NEWLINE_STYLE UNIX)
 configure_file(${CMAKE_SOURCE_DIR}/config/mimes.unix.in ${CMAKE_BINARY_DIR}/etc/root.mimes NEWLINE_STYLE UNIX)
+# We need to have class.rules during configuration time to avoid silent error during generation of dictionary:
+# Error in <TClass::ReadRules()>: Cannot find rules
+configure_file(${CMAKE_SOURCE_DIR}/etc/class.rules ${CMAKE_BINARY_DIR}/etc/class.rules COPYONLY)
 
 #---Generate the ROOTConfig files to be used by CMake projects-----------------------------------------------
 ROOT_GET_OPTIONS(ROOT_ALL_OPTIONS)
@@ -611,6 +701,7 @@ set(ROOT_CXX_FLAGS \"${__cxxflags}\")
 set(ROOT_C_FLAGS \"${__cflags}\")
 set(ROOT_fortran_FLAGS \"${__fflags}\")
 set(ROOT_EXE_LINKER_FLAGS \"${CMAKE_EXE_LINKER_FLAGS}\")")
+set(ROOT_BINDIR ${CMAKE_BINARY_DIR}/bin CACHE INTERNAL "")
 
 #---To be used from the binary tree--------------------------------------------------------------------------
 set(ROOT_INCLUDE_DIR_SETUP "
@@ -621,11 +712,15 @@ set(ROOT_LIBRARY_DIR_SETUP "
 # ROOT configured for use from the build tree - absolute paths are used.
 set(ROOT_LIBRARY_DIR ${CMAKE_BINARY_DIR}/lib)
 ")
-set(ROOT_BINARY_DIR_SETUP "
+set(ROOT_BINDIR_SETUP "
 # ROOT configured for use from the build tree - absolute paths are used.
-set(ROOT_BINARY_DIR ${CMAKE_BINARY_DIR}/bin)
+set(ROOT_BINDIR ${CMAKE_BINARY_DIR}/bin)
 ")
-set(ROOT_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
+# Deprecated value ROOT_BINARY_DIR
+set(ROOT_BINARY_DIR_SETUP "
+# Deprecated value, please don't use it and use ROOT_BINDIR instead.
+set(ROOT_BINARY_DIR ${ROOT_BINDIR})
+")
 
 get_property(exported_targets GLOBAL PROPERTY ROOT_EXPORTED_TARGETS)
 export(TARGETS ${exported_targets} NAMESPACE ROOT:: FILE ${PROJECT_BINARY_DIR}/ROOTConfig-targets.cmake)
@@ -640,19 +735,39 @@ file(RELATIVE_PATH ROOT_CMAKE_TO_INCLUDE_DIR "${CMAKE_INSTALL_FULL_CMAKEDIR}" "$
 file(RELATIVE_PATH ROOT_CMAKE_TO_LIB_DIR "${CMAKE_INSTALL_FULL_CMAKEDIR}" "${CMAKE_INSTALL_FULL_LIBDIR}")
 file(RELATIVE_PATH ROOT_CMAKE_TO_BIN_DIR "${CMAKE_INSTALL_FULL_CMAKEDIR}" "${CMAKE_INSTALL_FULL_BINDIR}")
 
+# '_' prefixed variables are used to construct the paths,
+# while the normal variants evaluate to full paths at runtime
 set(ROOT_INCLUDE_DIR_SETUP "
 # ROOT configured for the install with relative paths, so use these
-get_filename_component(ROOT_INCLUDE_DIRS \"\${_thisdir}/${ROOT_CMAKE_TO_INCLUDE_DIR}\" ABSOLUTE)
+get_filename_component(_ROOT_INCLUDE_DIRS \"\${_thisdir}/${ROOT_CMAKE_TO_INCLUDE_DIR}\" REALPATH)
+# resolve relative paths to absolute system paths
+get_filename_component(ROOT_INCLUDE_DIRS \"\${_ROOT_INCLUDE_DIRS}\" REALPATH)
 ")
 set(ROOT_LIBRARY_DIR_SETUP "
 # ROOT configured for the install with relative paths, so use these
-get_filename_component(ROOT_LIBRARY_DIR \"\${_thisdir}/${ROOT_CMAKE_TO_LIB_DIR}\" ABSOLUTE)
+get_filename_component(_ROOT_LIBRARY_DIR \"\${_thisdir}/${ROOT_CMAKE_TO_LIB_DIR}\" REALPATH)
+# resolve relative paths to absolute system paths
+get_filename_component(ROOT_LIBRARY_DIR \"\${_ROOT_LIBRARY_DIR}\" REALPATH)
 ")
-set(ROOT_BINARY_DIR_SETUP "
+set(ROOT_BINDIR_SETUP "
 # ROOT configured for the install with relative paths, so use these
-get_filename_component(ROOT_BINARY_DIR \"\${_thisdir}/${ROOT_CMAKE_TO_BIN_DIR}\" ABSOLUTE)
+get_filename_component(_ROOT_BINDIR \"\${_thisdir}/${ROOT_CMAKE_TO_BIN_DIR}\" REALPATH)
+# resolve relative paths to absolute system paths
+get_filename_component(ROOT_BINDIR \"\${_ROOT_BINDIR}\" REALPATH)
 ")
-set(ROOT_MODULE_PATH "\${_thisdir}/modules")
+# Deprecated value ROOT_BINARY_DIR
+set(ROOT_BINARY_DIR_SETUP "
+# Deprecated value, please don't use it and use ROOT_BINDIR instead.
+get_filename_component(ROOT_BINARY_DIR \"\${ROOT_BINDIR}\" REALPATH)
+")
+
+# used by ROOTConfig.cmake from the build directory
+configure_file(${CMAKE_SOURCE_DIR}/cmake/modules/RootMacros.cmake
+               ${CMAKE_BINARY_DIR}/RootMacros.cmake COPYONLY)
+
+# used by roottest to run tests against ROOT build
+configure_file(${CMAKE_SOURCE_DIR}/cmake/modules/RootTestDriver.cmake
+               ${CMAKE_BINARY_DIR}/RootTestDriver.cmake COPYONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/cmake/scripts/ROOTConfig.cmake.in
                ${CMAKE_BINARY_DIR}/installtree/ROOTConfig.cmake @ONLY NEWLINE_STYLE UNIX)
@@ -666,7 +781,7 @@ install(EXPORT ${CMAKE_PROJECT_NAME}Exports NAMESPACE ROOT:: FILE ROOTConfig-tar
 
 #---Especial definitions for root-config et al.--------------------------------------------------------------
 if(prefix STREQUAL "$(ROOTSYS)")
-  foreach(d prefix bindir libdir incdir etcdir mandir)
+  foreach(d prefix bindir libdir incdir etcdir tutdir mandir)
     string(REPLACE "$(ROOTSYS)" "$ROOTSYS"  ${d} ${${d}})
   endforeach()
 endif()
@@ -674,15 +789,21 @@ endif()
 
 #---compiledata.h--------------------------------------------------------------------------------------------
 
+if(APPLE AND runtime_cxxmodules)
+  # Modules have superior dynamic linker and they can resolve undefined symbols upon library loading.
+  set(CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS "${CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS} -undefined dynamic_lookup")
+  set(CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS "${CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS} -undefined dynamic_lookup")
+endif()
+
 if(WIN32)
   # We cannot use the compiledata.sh script for windows
-  configure_file(${CMAKE_SOURCE_DIR}/cmake/scripts/compiledata.win32.in ${CMAKE_BINARY_DIR}/include/compiledata.h NEWLINE_STYLE UNIX)
+  configure_file(${CMAKE_SOURCE_DIR}/cmake/scripts/compiledata.win32.in ${CMAKE_BINARY_DIR}/ginclude/compiledata.h NEWLINE_STYLE UNIX)
 else()
   execute_process(COMMAND ${CMAKE_SOURCE_DIR}/build/unix/compiledata.sh
-    ${CMAKE_BINARY_DIR}/include/compiledata.h "${CMAKE_CXX_COMPILER}"
+    ${CMAKE_BINARY_DIR}/ginclude/compiledata.h "${CMAKE_CXX_COMPILER}"
         "${CMAKE_CXX_FLAGS_RELEASE}" "${CMAKE_CXX_FLAGS_DEBUG}" "${CMAKE_CXX_FLAGS}"
-        "${CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS}" "${CMAKE_EXE_FLAGS}" "so" "${SYSLIBS}"
-        "${libdir}" "-lCore" "-lRint" "${incdir}" "" "" "${ROOT_ARCHITECTURE}" "" "${explicitlink}" )
+        "${CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS}" "${CMAKE_EXE_FLAGS}" "so"
+        "${libdir}" "-lCore" "-lRint" "${incdir}" "" "" "${ROOT_ARCHITECTURE}" "")
 endif()
 
 #---Get the value of CMAKE_CXX_FLAGS provided by the user in the command line
@@ -698,12 +819,16 @@ configure_file(${CMAKE_SOURCE_DIR}/config/setxrd.sh ${CMAKE_RUNTIME_OUTPUT_DIREC
 configure_file(${CMAKE_SOURCE_DIR}/config/proofserv.in ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/proofserv @ONLY NEWLINE_STYLE UNIX)
 configure_file(${CMAKE_SOURCE_DIR}/config/roots.in ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/roots @ONLY NEWLINE_STYLE UNIX)
 configure_file(${CMAKE_SOURCE_DIR}/config/root-help.el.in root-help.el @ONLY NEWLINE_STYLE UNIX)
-if (XROOTD_FOUND AND XROOTD_NOMAIN)
+if(xproofd AND xrootd AND ssl AND XROOTD_NOMAIN)
   configure_file(${CMAKE_SOURCE_DIR}/config/xproofd.in ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/xproofd @ONLY NEWLINE_STYLE UNIX)
 endif()
 if(WIN32)
   set(thisrootbat ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/thisroot.bat)
   configure_file(${CMAKE_SOURCE_DIR}/config/thisroot.bat ${thisrootbat} @ONLY)
+  configure_file(${CMAKE_SOURCE_DIR}/config/thisroot.ps1 ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/thisroot.ps1 @ONLY)
+  configure_file(${CMAKE_SOURCE_DIR}/config/root.rc.in ${CMAKE_BINARY_DIR}/etc/root.rc @ONLY)
+  install(FILES ${CMAKE_SOURCE_DIR}/build/win/w32pragma.h  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} COMPONENT headers)
+  install(FILES ${CMAKE_SOURCE_DIR}/build/win/sehmap.h  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} COMPONENT headers)
 endif()
 
 #--Local root-configure
@@ -712,8 +837,12 @@ set(bindir $ROOTSYS/bin)
 set(libdir $ROOTSYS/lib)
 set(incdir $ROOTSYS/include)
 set(etcdir $ROOTSYS/etc)
+set(tutdir $ROOTSYS/tutorials)
 set(mandir $ROOTSYS/man)
 configure_file(${CMAKE_SOURCE_DIR}/config/root-config.in ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/root-config @ONLY NEWLINE_STYLE UNIX)
+if(MSVC)
+  configure_file(${CMAKE_SOURCE_DIR}/config/root-config.bat.in ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/root-config.bat @ONLY)
+endif()
 
 install(FILES ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/thisroot.sh
               ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/thisroot.csh
@@ -735,7 +864,7 @@ install(FILES ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/memprobe
                           WORLD_EXECUTE WORLD_READ
               DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-if (XROOTD_FOUND AND XROOTD_NOMAIN)
+if(xproofd AND xrootd AND ssl AND XROOTD_NOMAIN)
    install(FILES ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/xproofd
                  PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
                              GROUP_EXECUTE GROUP_READ
@@ -743,8 +872,8 @@ if (XROOTD_FOUND AND XROOTD_NOMAIN)
                  DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
-install(FILES ${CMAKE_BINARY_DIR}/include/RConfigOptions.h
-              ${CMAKE_BINARY_DIR}/include/compiledata.h
+install(FILES ${CMAKE_BINARY_DIR}/ginclude/RConfigOptions.h
+              ${CMAKE_BINARY_DIR}/ginclude/compiledata.h
               DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 install(FILES ${CMAKE_BINARY_DIR}/etc/root.mimes

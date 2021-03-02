@@ -1,6 +1,6 @@
 
 /** \class RooStats::HistFactory::HistFactoryNavigation
- *  \ingroup HistFactory 
+ *  \ingroup HistFactory
  */
 
 #include <iomanip>
@@ -8,8 +8,6 @@
 
 #include "TFile.h"
 #include "TRegexp.h"
-#include "TCanvas.h"
-#include "TLegend.h"
 #include "TMath.h"
 
 #include "RooRealSumPdf.h"
@@ -787,10 +785,8 @@ namespace RooStats {
 
 	// Iterate over the categories and get the
 	// pdf and observables for each category
-	TIterator* iter = channelCat->typeIterator() ;
-	RooCatType* tt = NULL;
-        while((tt=(RooCatType*) iter->Next())) {
-	  std::string ChannelName = tt->GetName();
+	for (const auto& nameIdx : *channelCat) {
+	  const std::string& ChannelName = nameIdx.first;
 	  fChannelNameVec.push_back( ChannelName );
 	  RooAbsPdf* pdftmp = simPdf->getPdf(ChannelName.c_str()) ;
 	  RooArgSet* obstmp = pdftmp->getObservables(*observables) ;
@@ -1053,35 +1049,32 @@ namespace RooStats {
       // First, check that the node to replace is actually a node:
       RooAbsArg* nodeToReplace = findChild(ToReplace, fModel);
       if( nodeToReplace==NULL ) {
-	std::cout << "Error: Cannot replace node: " << ToReplace
-		  << " because this node wasn't found in: " << fModel->GetName()
-		  << std::endl;
-	throw hf_exc();
+        std::cout << "Error: Cannot replace node: " << ToReplace
+            << " because this node wasn't found in: " << fModel->GetName()
+            << std::endl;
+        throw hf_exc();
       }
 
       // Now that we have the node we want to replace, we have to 
       // get its parent node
-      
+
       // Do this by looping over the clients and replacing their servers
       // (NOTE: This happens for ALL clients across the pdf)
-      TIterator* clientItr = nodeToReplace->clientIterator();
-      RooAbsArg* client=NULL;
-      while((client=(RooAbsArg*)clientItr->Next())) {
-	
-	// Check if this client is a member of our pdf
-	// (We probably don't want to mess with clients
-	// if they aren't...)
-	if( findChild(client->GetName(), fModel)==NULL ) continue;
-	
-	// Now, do the replacement:
-	bool valueProp=false;
-	bool shapeProp=false;
-	client->replaceServer( *nodeToReplace, *ReplaceWith, valueProp, shapeProp );
-	std::cout << "Replaced: " << ToReplace << " with: " << ReplaceWith->GetName()
-		  << " in node: " << client->GetName() << std::endl;
+      for (auto client : nodeToReplace->clients()) {
+
+        // Check if this client is a member of our pdf
+        // (We probably don't want to mess with clients
+        // if they aren't...)
+        if( findChild(client->GetName(), fModel) == nullptr) continue;
+
+        // Now, do the replacement:
+        bool valueProp=false;
+        bool shapeProp=false;
+        client->replaceServer( *nodeToReplace, *ReplaceWith, valueProp, shapeProp );
+        std::cout << "Replaced: " << ToReplace << " with: " << ReplaceWith->GetName()
+		          << " in node: " << client->GetName() << std::endl;
 
       }
-      delete clientItr;
 
       return;
 

@@ -1,3 +1,9 @@
+# Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.
+# All rights reserved.
+#
+# For the licensing terms see $ROOTSYS/LICENSE.
+# For the list of contributors see $ROOTSYS/README/CREDITS.
+
 ############################################################################
 # CMakeLists.txt file for building ROOT proof/proofplayer package
 # @author Pere Mato, CERN
@@ -23,7 +29,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(ProofPlayer
     TProofPlayerLite.h
     TStatsFeedback.h
     TStatus.h
-    TVirtualPacketizer.h
   SOURCES
     TDrawFeedback.cxx
     TEventIter.cxx
@@ -42,7 +47,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(ProofPlayer
     TProofPlayerLite.cxx
     TStatsFeedback.cxx
     TStatus.cxx
-    TVirtualPacketizer.cxx
   DEPENDENCIES
     Hist
     Net
@@ -51,6 +55,7 @@ ROOT_STANDARD_LIBRARY_PACKAGE(ProofPlayer
     RIO
     Thread
     Tree
+    TreePlayer
 )
 
 ROOT_STANDARD_LIBRARY_PACKAGE(ProofDraw

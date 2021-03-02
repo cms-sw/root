@@ -21,10 +21,13 @@
 //                                                                      //
 //////////////////////////////////////////////////////////////////////////
 
+#include "TDataType.h"
 #include "TObject.h"
 #include "TClass.h"
+#include "Bytes.h"
 
 #include <vector>
+#include <string>
 
 class TVirtualStreamerInfo;
 class TStreamerElement;
@@ -57,8 +60,8 @@ protected:
      fBufCur(0), fBufMax(0), fParent(0), fReAllocFunc(0), fCacheStack(0,(TVirtualArray*)0) {}
 
    // TBuffer objects cannot be copied or assigned
-   TBuffer(const TBuffer &);           // not implemented
-   void operator=(const TBuffer &);    // not implemented
+   TBuffer(const TBuffer &) = delete;
+   void operator=(const TBuffer &) = delete;
 
    Int_t Read(const char *name) { return TObject::Read(name); }
    Int_t Write(const char *name, Int_t opt, Int_t bufs)
@@ -91,11 +94,13 @@ public:
    void     SetParent(TObject *parent);
    TObject *GetParent()  const;
    char    *Buffer()     const { return fBuffer; }
+   char    *GetCurrent() const { return fBufCur; }
    Int_t    BufferSize() const { return fBufSize; }
    void     DetachBuffer() { fBuffer = 0; }
    Int_t    Length()     const { return (Int_t)(fBufCur - fBuffer); }
    void     Expand(Int_t newsize, Bool_t copy = kTRUE);  // expand buffer to newsize
    void     AutoExpand(Int_t size_needed);  // expand buffer to newsize
+   Bool_t   ByteSwapBuffer(Long64_t n, EDataType type);  // Byte-swap N primitive-elements in the buffer
 
    virtual Bool_t     CheckObject(const TObject *obj) = 0;
    virtual Bool_t     CheckObject(const void *obj, const TClass *ptrClass) = 0;

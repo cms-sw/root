@@ -4,19 +4,20 @@
 #include "TSchemaRule.h"
 
 #include "RConversionRuleParser.h"
+#include "TClassEdit.h"
 #include "TSchemaRuleProcessor.h"
 #include "TSchemaType.h"
 #include "TObjArray.h"
 #include "TObjString.h"
-#include "TNamed.h"
+#include "TROOT.h"
+
 #include <utility>
 #include <iostream>
 #include <vector>
 #include <list>
 #include <string>
 #include <cstdlib>
-#include "TROOT.h"
-#include "Riostream.h"
+#include <sstream>
 
 ClassImp(TSchemaRule);
 
@@ -454,7 +455,9 @@ Bool_t TSchemaRule::TestChecksum( UInt_t checksum ) const
 
 void TSchemaRule::SetSourceClass( const TString& classname )
 {
-   fSourceClass = classname;
+   std::string normalizedName;
+   TClassEdit::GetNormalizedName(normalizedName, classname);
+   fSourceClass = normalizedName;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -470,7 +473,9 @@ const char *TSchemaRule::GetSourceClass() const
 
 void TSchemaRule::SetTargetClass( const TString& classname )
 {
-   fTargetClass = classname;
+   std::string normalizedName;
+   TClassEdit::GetNormalizedName(normalizedName, classname);
+   fTargetClass = normalizedName;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -908,16 +913,38 @@ Bool_t TSchemaRule::ProcessChecksum( const TString& checksum ) const
    // Check the validity of each list element
    /////////////////////////////////////////////////////////////////////////////
 
-   std::list<std::string>::iterator it;
-   for( it = checksums.begin(); it != checksums.end(); ++it ) {
-      if( !Internal::TSchemaRuleProcessor::IsANumber( *it ) ) {
+   for( const auto& checksumStr : checksums ) {
+      auto chksum = ParseChecksum( checksumStr.c_str() );
+      if (chksum == 0u) {
          delete fChecksumVect;
-         fChecksumVect = 0;
+         fChecksumVect = nullptr;
          return kFALSE;
       }
-      fChecksumVect->push_back( atoi( it->c_str() ) );
+
+      fChecksumVect->push_back( chksum );
    }
    return kTRUE;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Parse the checksum in the given string. Returns either the checksum or zero
+/// if the string is not a hex or decimal number.
+
+UInt_t TSchemaRule::ParseChecksum(const char* checksum) const {
+  std::istringstream converter(checksum);
+  UInt_t chksum;
+  converter >> std::hex >> chksum;
+  if (converter.fail()) {
+    converter.clear();
+    converter.seekg(0);
+    converter >> std::dec >> chksum;
+  }
+
+  if( converter.fail() ) {
+    return 0u;
+  }
+
+  return chksum;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

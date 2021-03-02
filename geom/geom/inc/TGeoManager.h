@@ -14,7 +14,9 @@
 
 #include <mutex>
 #include <thread>
+#include <map>
 
+#include "TNamed.h"
 #include "TObjArray.h"
 #include "TGeoNavigator.h"
 
@@ -41,6 +43,12 @@ class TGeoBorderSurface;
 
 class TGeoManager : public TNamed
 {
+public:
+  enum EDefaultUnits {
+     kG4Units   = 0,
+     kRootUnits = 1
+  };
+
 protected:
    static std::mutex     fgMutex;           //! mutex for navigator booking in MT mode
    static Bool_t         fgLock;            //! Lock preventing a second geometry to be loaded
@@ -49,9 +57,10 @@ protected:
    static Int_t          fgMaxDaughters;    //! Maximum number of daughters
    static Int_t          fgMaxXtruVert;     //! Maximum number of Xtru vertices
    static UInt_t         fgExportPrecision; //! Precision to be used in ASCII exports
+   static EDefaultUnits  fgDefaultUnits;    //! Default units in GDML if not explicit in some tags
 
-   TGeoManager(const TGeoManager&);
-   TGeoManager& operator=(const TGeoManager&);
+   TGeoManager(const TGeoManager&) = delete;
+   TGeoManager& operator=(const TGeoManager&) = delete;
 
 private :
    Double_t              fPhimin;           //! lowest range for phi cut
@@ -108,6 +117,8 @@ private :
    typedef NavigatorsMap_t::iterator                         NavigatorsMapIt_t;
    typedef std::map<std::thread::id, Int_t>                  ThreadsMap_t;
    typedef ThreadsMap_t::const_iterator                      ThreadsMapIt_t;
+   // Map of constant properties
+   typedef std::map<std::string, Double_t>                   ConstPropMap_t;
 
    NavigatorsMap_t       fNavigators;       //! Map between thread id's and navigator arrays
    static ThreadsMap_t  *fgThreadId;        //! Thread id's map
@@ -123,7 +134,6 @@ private :
    TGeoShape            *fClippingShape;    //! clipping shape for raytracing
    TGeoElementTable     *fElementTable;     //! table of elements
 
-   Int_t                *fNodeIdArray;      //! array of node id's
    Int_t                 fNLevel;           // maximum accepted level in geometry
    TGeoVolume           *fPaintVolume;      //! volume currently painted
    TGeoVolume           *fUserPaintVolume;  //!
@@ -140,6 +150,7 @@ private :
    Int_t                 fRaytraceMode;     //! Raytrace mode: 0=normal, 1=pass through, 2=transparent
    Bool_t                fUsePWNav;         // Activate usage of parallel world in navigation
    TGeoParallelWorld    *fParallelWorld;    // Parallel world
+   ConstPropMap_t        fProperties;       // Map of user-defined constant properties
 //--- private methods
    Bool_t                IsLoopingVolumes() const     {return fLoopVolumes;}
    void                  Init();
@@ -165,6 +176,10 @@ public:
    Int_t                  AddTrack(TVirtualGeoTrack *track);
    Int_t                  AddVolume(TGeoVolume *volume);
    TGeoNavigator         *AddNavigator();
+   Bool_t                 AddProperty(const char *property, Double_t value);
+   Double_t               GetProperty(const char *name, Bool_t *error = nullptr) const;
+   Double_t               GetProperty(size_t i, TString &name, Bool_t *error = nullptr) const;
+   Int_t                  GetNproperties() const { return fProperties.size(); }
    void                   ClearOverlaps();
    void                   RegisterMatrix(const TGeoMatrix *matrix);
    void                   SortOverlaps();
@@ -462,6 +477,9 @@ public:
    static Bool_t          IsLocked();
    static void            SetExportPrecision(UInt_t prec) {fgExportPrecision = prec;}
    static UInt_t          GetExportPrecision() {return fgExportPrecision;}
+   static void            SetDefaultUnits(EDefaultUnits new_value);
+   static EDefaultUnits   GetDefaultUnits();
+   static Bool_t          LockDefaultUnits(Bool_t new_value);
    Bool_t                 IsStreamingVoxels() const {return fStreamVoxels;}
    Bool_t                 IsCleaning() const {return fIsGeomCleaning;}
 
@@ -578,7 +596,7 @@ public:
    void                  SetUseParallelWorldNav(Bool_t flag);
    Bool_t                IsParallelWorldNav() const {return fUsePWNav;}
 
-   ClassDef(TGeoManager, 16)          // geometry manager
+   ClassDef(TGeoManager, 17)          // geometry manager
 };
 
 R__EXTERN TGeoManager *gGeoManager;

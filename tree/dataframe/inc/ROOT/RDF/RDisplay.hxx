@@ -11,6 +11,8 @@
 #ifndef ROOT_RDFDISPLAYER
 #define ROOT_RDFDISPLAYER
 
+#include "ROOT/RDF/Utils.hxx"  // IsDataContainer, InterpreterCalc
+#include "ROOT/RVec.hxx"
 #include "ROOT/TypeTraits.hxx"
 #include "TClassEdit.h"
 
@@ -95,7 +97,7 @@ private:
    /// \param[in] element The event to convert to its string representation
    /// \param[in] index To which column the event belongs to
    /// \return false, the event is not a collection
-   template <typename T, typename std::enable_if<!ROOT::TypeTraits::IsContainer<T>::value, int>::type = 0>
+   template <typename T, typename std::enable_if<!ROOT::Internal::RDF::IsDataContainer<T>::value, int>::type = 0>
    bool AddInterpreterString(std::stringstream &stream, T &element, const int &index)
    {
       stream << "*((std::string*)" << ROOT::Internal::RDF::PrettyPrintAddr(&(fRepresentations[index]))
@@ -104,14 +106,14 @@ private:
    }
 
    ////////////////////////////////////////////////////////////////////////////
-   /// Appends collection.size() cling::printValue call to the stringstream.
+   /// Appends collection.size() cling::printValue calls to the stringstream.
    /// \tparam T the type of the event to convert
    /// \param[in] stream Where the conversion function call will be chained.
-   /// \param[in] element The event to convert to its string representation
+   /// \param[in] collection The event to convert to its string representation
    /// \param[in] index To which column the event belongs to
    /// \return true, the event is a collection
    /// This function chains a sequence of call to cling::printValue, one for each element of the collection.
-   template <typename T, typename std::enable_if<ROOT::TypeTraits::IsContainer<T>::value, int>::type = 0>
+   template <typename T, typename std::enable_if<ROOT::Internal::RDF::IsDataContainer<T>::value, int>::type = 0>
    bool AddInterpreterString(std::stringstream &stream, T &collection, const int &index)
    {
       size_t collectionSize = std::distance(std::begin(collection), std::end(collection));
@@ -127,10 +129,50 @@ private:
       // For each element, append a call and feed the proper type returned by GetSplit
       for (size_t i = 0; i < collectionSize; ++i) {
          stream << "*((std::string*)" << ROOT::Internal::RDF::PrettyPrintAddr(&(fCollectionsRepresentations[index][i]))
-                << ") = cling::printValue((" << output[1] << "*)" << ROOT::Internal::RDF::PrettyPrintAddr(&(collection[i])) << ");";
+                << ") = cling::printValue((" << output[1] << "*)"
+                << ROOT::Internal::RDF::PrettyPrintAddr(&(collection[i])) << ");";
       }
       return true;
    }
+
+   ////////////////////////////////////////////////////////////////////////////
+   /// AddInterpreterString overload for arrays of chars.
+   ///
+   /// \param[in] charArr The character array to convert to string representation
+   /// \param[in] index To which column the event belongs
+   /// \return false, the event is not a collection
+   ///
+   /// This specialization for arrays of characters skips the cling::printValue
+   /// (i.e. appends nothing to the stream) and directly writes to fRepresentations the
+   /// string representation of the array of chars.
+   bool AddInterpreterString(std::stringstream &, ROOT::RVec<char> &charArr, const int &index)
+   {
+      // if null-terminated char array, do not copy the null terminator into std::string, it makes columns misaligned.
+      const auto length = charArr[charArr.size()-1] == '\0' ? charArr.size() - 1 : charArr.size();
+      const std::string arrAsStr(charArr.data(), length); // also works for non-null-terminated strings
+      fRepresentations[index] = arrAsStr;
+      return false; // do not treat this as a collection
+   }
+
+   ////////////////////////////////////////////////////////////////////////////
+   /// AddInterpreterString overload for arrays of booleans.
+   ///
+   /// \param[in] boolArr The bool array to convert to string representation
+   /// \param[in] index To which column the event belongs
+   /// \return true, the event is a collection
+   ///
+   /// This specialization for arrays of booleans skips the cling::printValue
+   /// (i.e. appends nothing to the stream) and directly writes to fCollectionsRepresentations the
+   /// string representation of the array of chars.
+   bool AddInterpreterString(std::stringstream &, ROOT::RVec<bool> &boolArr, const int &index)
+   {
+      fCollectionsRepresentations[index].reserve(boolArr.size());
+      for (bool b : boolArr)
+         fCollectionsRepresentations[index].push_back(b ? "true" : "false");
+
+      return true; // treat this as a collection
+   }
+
 
    ////////////////////////////////////////////////////////////////////////////
    /// Adds a single element to the next slot in the table
@@ -150,17 +192,13 @@ private:
    void MovePosition();
 
    ////////////////////////////////////////////////////////////////////////////
-   /// Feed a piece of code to cling and handle errors
-   void CallInterpreter(const std::string &code);
-
-   ////////////////////////////////////////////////////////////////////////////
    /// Get the number of columns that do NOT fit in the characters limit
    size_t GetNColumnsToShorten() const;
 
    ////////////////////////////////////////////////////////////////////////////
    /// Adds a row of events to the table
    template <typename... Columns>
-   void AddRow(Columns... columns)
+   void AddRow(Columns &... columns)
    {
       std::stringstream calc; // JITted code
       int columnIndex = 0;
@@ -168,7 +206,9 @@ private:
       fIsCollection = {AddInterpreterString(calc, columns, columnIndex++)...};
 
       // Let cling::printValue handle the conversion. This can be done only through cling-compiled code.
-      CallInterpreter(calc.str());
+      const std::string toJit = calc.str();
+      if (!toJit.empty())
+         ROOT::Internal::RDF::InterpreterCalc(calc.str(), "Display");
 
       // Populate the fTable using the results of the JITted code.
       for (size_t i = 0; i < fNColumns; ++i) {
@@ -186,6 +226,8 @@ private:
    /// If the number of required rows has been parsed, returns false.
    bool HasNext() { return fEntries > 0; }
 
+   void EnsureCurrentColumnWidth(size_t w);
+
 public:
    ////////////////////////////////////////////////////////////////////////////
    /// Creates an RDisplay to print the event values
@@ -198,7 +240,7 @@ public:
    /// Prints the representation to the standard output
    ///
    /// Collections are shortened to the first and last element. The overall width
-   /// is shortened to a fixed size of TODO
+   /// is shortened to a fixed number of columns that should fit the screen width.
    void Print() const;
 
    ////////////////////////////////////////////////////////////////////////////

@@ -25,12 +25,12 @@ It contains information on the real remote object as:
   - Remote object address
 */
 
+#include "TRemoteObject.h"
+#include "TSystemDirectory.h"
 #include "TApplication.h"
 #include "TROOT.h"
-#include "TRemoteObject.h"
-#include "TSystem.h"
+#include "TBuffer.h"
 #include "TBrowser.h"
-#include "TOrdCollection.h"
 #include "TList.h"
 #include "TClass.h"
 
@@ -162,7 +162,7 @@ TList *TRemoteObject::Browse()
             if (!strcmp(fname.Data(), "."))
                sdirpath = name;
             else if (!strcmp(fname.Data(), ".."))
-               sdirpath = gSystem->DirName(name);
+               sdirpath = gSystem->GetDirName(name);
             else {
                sdirpath =  name;
                if (!sdirpath.EndsWith("/"))

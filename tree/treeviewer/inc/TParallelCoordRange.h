@@ -13,8 +13,8 @@
 #define ROOT_TParallelCoordRange
 
 #include "TNamed.h"
-
 #include "TAttLine.h"
+#include "TList.h"
 
 class TParallelCoordVar;
 class TParallelCoord;
@@ -43,8 +43,8 @@ private:
 
 public:
    TParallelCoordRange();
-   ~TParallelCoordRange();
    TParallelCoordRange(TParallelCoordVar *var, Double_t min=0, Double_t max=0, TParallelCoordSelect* sel=NULL);
+   virtual ~TParallelCoordRange();
 
    virtual void BringOnTop() ;// *MENU*
    virtual void Delete(const Option_t* options=""); // *MENU*
@@ -65,16 +65,6 @@ public:
    ClassDef(TParallelCoordRange,1); // A TParallelCoordRange is a range used for parallel coordinates plots.
 };
 
-#endif
-
-#ifndef ROOT_TParallelCoordSelect
-#define ROOT_TParallelCoordSelect
-
-#include "TAttLine.h"
-#include "TList.h"
-
-class TParallelCoord;
-class TParallelCoordRange;
 
 class TParallelCoordSelect : public TList, public TAttLine {
 public:

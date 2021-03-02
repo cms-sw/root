@@ -1,7 +1,7 @@
-/// Author:  Sergey Linev, GSI  6/04/2017
+// Author:  Sergey Linev, GSI  6/04/2017
 
 /*************************************************************************
- * Copyright (C) 1995-2018, Rene Brun and Fons Rademakers.               *
+ * Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
@@ -13,6 +13,13 @@
 #include "TString.h"
 
 #include <ROOT/RMakeUnique.hxx>
+
+/** \class TWebSnapshot
+\ingroup webgui6
+
+Paint state of object to transfer to JavaScript side
+
+*/
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 /// destructor
@@ -42,7 +49,6 @@ void TWebSnapshot::SetObjectIDAsPtr(void *ptr)
    SetObjectID(std::to_string(hash));
 }
 
-
 ///////////////////////////////////////////////////////////////////////////////////////////
 /// Create new entry in list of primitives
 
@@ -61,7 +67,7 @@ TWebSnapshot &TPadWebSnapshot::NewPrimitive(TObject *obj, const std::string &opt
 
 TPadWebSnapshot &TPadWebSnapshot::NewSubPad()
 {
-   auto res = new TPadWebSnapshot();
+   auto res = new TPadWebSnapshot(IsReadOnly());
    fPrimitives.emplace_back(res);
    return *res;
 }
@@ -73,7 +79,4 @@ TWebSnapshot &TPadWebSnapshot::NewSpecials()
 {
    fPrimitives.emplace(fPrimitives.begin(), std::make_unique<TWebSnapshot>());
    return *(fPrimitives.front());
-
 }
-
-

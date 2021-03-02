@@ -117,7 +117,9 @@ example might be useful. The geometry here represents the word ROOT that
 is replicated in some symmetric manner. You might for instance ask some
 questions after having a first look:
 
-***`Q: "OK, I understand the first lines that load the libGeom library and create a geometry manager object. I also recognize from the previous example the following lines creating some materials and media, but what about the geometrical transformations below?"`***
+***`Q:`*** "OK, I understand the first lines that load the libGeom library and create
+a geometry manager object. I also recognize from the previous example the following
+lines creating some materials and media, but what about the geometrical transformations below?"
 
 ***`A:`*** As explained before, the model that we are trying to create
 is a hierarchy of volumes based on ***`containment`***. This is
@@ -130,7 +132,8 @@ accomplished by defining a ***`local geometrical transformation`*** of
 the daughter with respect to the mother coordinate system. These
 transformations will be subsequently used in the example.
 
-***`Q: "I see the lines defining the top level volume as in the previous example, but what about the other volumes named REPLICA and ROOT?"`***
+***`Q:`*** "I see the lines defining the top level volume as in the previous example,
+but what about the other volumes named REPLICA and ROOT?"
 
 ***`A:`*** You will also notice that several other volumes are created
 by using lines like:
@@ -149,7 +152,8 @@ Volumes"). As for REPLICA and ROOT volumes, they are just some
 structure represented by (a real or) a virtual volume can be
 ***`replicated`*** several times in the geometry.
 
-***`Q: "Fine, so probably the real volumes are the ones composing the letters R, O and T. Why one have to define so many volumes to make an R?"`***
+***`Q:`*** "Fine, so probably the real volumes are the ones composing the letters R,
+O and T. Why one have to define so many volumes to make an R?"
 
 ***`A:`*** Well, in real life some objects have much more complex shapes
 that an ***`R`***. The modeller cannot just know all of them; the idea
@@ -157,7 +161,8 @@ is to make a complex object by using elementary building blocks that
 have known shapes (called ***`primitive shapes`***). Gluing these
 together in the appropriate way is the user responsibility.
 
-***`Q: "I am getting the global picture but not making much out of it... There are also a lot of calls to TGeoVolume::AddNode() that I do not understand."`***
+***`Q:`*** "I am getting the global picture but not making much out of it... There
+are also a lot of calls to TGeoVolume::AddNode() that I do not understand."
 
 ***`A:`*** A volume is positioned inside another one by using this
 method. The relative geometrical transformation as well as a copy number
@@ -1854,7 +1859,7 @@ will illustrate them by examples.
     row-beside-row inside the container, making life much easier for its
     navigation algorithms. The problem is that in order to reproduce the
     honeycomb structure out of rows of cells, we have to overlap row
-    containers. Woops - we have not obeyed rule No. 2 in positioning.
+    containers. Whoops - we have not obeyed rule No. 2 in positioning.
     The way out is to position our rows with a special prototype:
 
 ``` {.cpp}
@@ -1928,7 +1933,7 @@ few chambers, but definitely not for 1000. Fortunately the modeller is
 smarter than that and creates for each volume some optimization
 structures called `voxels` to minimize the penalty having too many
 daughters, but if you have 100 pads like this in your geometry you will
-anyway loose a lot in your tracking performance. The way out when
+anyway lose a lot in your tracking performance. The way out when
 volumes can be arranged according to simple patterns is the usage of
 divisions. We will describe them in detail later on. Let's think now at
 a different situation: instead of 1000 chambers of the same type, we may
@@ -3363,8 +3368,8 @@ name): `gGeoManager->GetVolume("vol_name")->Draw();`
 
 Supposing you now understand the basic things to do for drawing the
 geometry or parts of it, you still might be not happy and wishing to
-have more control on it. We will describe below how you can tune some
-fine settings. Since the corresponding attributes are flags belonging to
+have more control on it. We will describe below how you can fine-tune some
+ settings. Since the corresponding attributes are flags belonging to
 volume and node objects, you can change them at any time (even when the
 picture is already drawn) and see immediately the result.
 
@@ -3605,7 +3610,7 @@ Option_t *opt="vg")
     TGeoBBox\_0x1, TGeoBBox\_0x2, ...). If `"f"` option is set then then
     suffix will contain pointer of object (e.g. TGeoBBox\_0xAAAAA01,
     ...). Finally if option `"n"` is set then no suffix will be added,
-    though in this case uniqness of the names is not ensured and it can
+    though in this case uniqueness of the names is not ensured and it can
     cause that file will be invalid.
 
 Loading geometry from a root file can be done in the same way as for any

@@ -22,7 +22,6 @@
 //                                                                        //
 ////////////////////////////////////////////////////////////////////////////
 
-#include "THashTable.h"
 #include "TTree.h"
 #include "TTreeReaderUtils.h"
 #include "TNotifyLink.h"
@@ -30,6 +29,7 @@
 #include <deque>
 #include <iterator>
 #include <unordered_map>
+#include <string>
 
 class TDictionary;
 class TDirectory;
@@ -64,7 +64,7 @@ public:
 
    public:
       /// Default-initialize the iterator as "past the end".
-      Iterator_t(): fEntry(-1), fReader() {}
+      Iterator_t(): fEntry(-1), fReader(nullptr) {}
 
       /// Initialize the iterator with the reader it steers and a
       /// tree entry number; -1 is invalid.
@@ -131,6 +131,7 @@ public:
       kEntryChainFileError, ///< problem in opening a chain's file
       kEntryDictionaryError, ///< problem reading dictionary info from tree
       kEntryBeyondEnd, ///< last entry loop has reached its end
+      kEntryBadReader, ///< One of the readers was not successfully initialized.
       kEntryUnknownError ///< LoadTree return less than -4, likely a 'newer' error code.
    };
 
@@ -141,22 +142,23 @@ public:
       kExternalLoadTree  ///< User code called LoadTree directly.
    };
 
-   static constexpr const char * const fgEntryStatusText[kEntryBeyondEnd + 1] = {
+   static constexpr const char * const fgEntryStatusText[kEntryUnknownError + 1] = {
       "valid entry",
       "the tree does not exist",
       "the tree entry number does not exist",
       "cannot access chain element",
       "problem in opening a chain's file",
       "problem reading dictionary info from tree",
-      "last entry loop has reached its end"
+      "last entry loop has reached its end",
+      "one of the readers was not successfully initialized",
+      "LoadTree return less than -4, likely a 'newer' error code"
    };
 
    TTreeReader();
 
    TTreeReader(TTree* tree, TEntryList* entryList = nullptr);
    TTreeReader(const char* keyname, TDirectory* dir, TEntryList* entryList = nullptr);
-   TTreeReader(const char* keyname, TEntryList* entryList = nullptr):
-   TTreeReader(keyname, nullptr, entryList) {}
+   TTreeReader(const char *keyname, TEntryList *entryList = nullptr) : TTreeReader(keyname, nullptr, entryList) {}
 
    ~TTreeReader();
 
@@ -219,7 +221,8 @@ public:
 
    EEntryStatus GetEntryStatus() const { return fEntryStatus; }
 
-   Long64_t GetEntries(Bool_t force) const;
+   Long64_t GetEntries() const;
+   Long64_t GetEntries(Bool_t force);
 
    /// Returns the index of the current entry being read.
    ///

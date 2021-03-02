@@ -9,23 +9,22 @@
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
 
-#include <string.h>
 
-#include "Riostream.h"
 #include "TROOT.h"
+#include "TBuffer.h"
 #include "TGraphErrors.h"
 #include "TStyle.h"
 #include "TMath.h"
-#include "TArrow.h"
-#include "TBox.h"
 #include "TVirtualPad.h"
 #include "TH1.h"
 #include "TF1.h"
-#include "TVector.h"
 #include "TVectorD.h"
-#include "TStyle.h"
-#include "TClass.h"
 #include "TSystem.h"
+#include "strtok.h"
+
+#include <iostream>
+#include <fstream>
+#include <cstring>
 #include <string>
 
 ClassImp(TGraphErrors);
@@ -44,7 +43,7 @@ The picture below gives an example:
 
 Begin_Macro(source)
 {
-   c1 = new TCanvas("c1","A Simple Graph with error bars",200,10,700,500);
+   auto c1 = new TCanvas("c1","A Simple Graph with error bars",200,10,700,500);
    c1->SetFillColor(42);
    c1->SetGrid();
    c1->GetFrame()->SetFillColor(21);
@@ -54,12 +53,11 @@ Begin_Macro(source)
    Double_t y[n]  = {1,2.9,5.6,7.4,9,9.6,8.7,6.3,4.5,1};
    Double_t ex[n] = {.05,.1,.07,.07,.04,.05,.06,.07,.08,.05};
    Double_t ey[n] = {.8,.7,.6,.5,.4,.4,.5,.6,.7,.8};
-   gr = new TGraphErrors(n,x,y,ex,ey);
+   auto gr = new TGraphErrors(n,x,y,ex,ey);
    gr->SetTitle("TGraphErrors Example");
    gr->SetMarkerColor(4);
    gr->SetMarkerStyle(21);
    gr->Draw("ALP");
-   return c1;
 }
 End_Macro
 */
@@ -399,6 +397,37 @@ void TGraphErrors::Apply(TF1 *f)
 
       SetPoint(i, x, f->Eval(x, y));
       SetPointError(i, ex, TMath::Abs(f->Eval(x, y + ey) - f->Eval(x, y - ey)) / 2.);
+   }
+   if (gPad) gPad->Modified();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// apply function to all the data points
+/// x = f(x,y)
+///
+/// The error is calculated as ex=(f(x+ex,y)-f(x-ex,y))/2
+/// This is the same as error(fx) = df/dx * ex for small errors
+///
+/// For generic functions the symmetric errors might become non-symmetric
+/// and are averaged here. Use TGraphAsymmErrors if desired.
+///
+/// error on y doesn't change
+
+void TGraphErrors::ApplyX(TF1 *f)
+{
+   Double_t x, y, ex, ey;
+
+   if (fHistogram) {
+      delete fHistogram;
+      fHistogram = 0;
+   }
+   for (Int_t i = 0; i < GetN(); i++) {
+      GetPoint(i, x, y);
+      ex = GetErrorX(i);
+      ey = GetErrorY(i);
+
+      SetPoint(i, f->Eval(x,y), y);
+      SetPointError(i, TMath::Abs(f->Eval(x + ex, y) - f->Eval(x - ex, y)) / 2. , ey);
    }
    if (gPad) gPad->Modified();
 }

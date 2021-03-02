@@ -2,7 +2,7 @@
 // Author: Fons Rademakers   20/01/98
 
 /*************************************************************************
- * Copyright (C) 1995-2000, Rene Brun and Fons Rademakers.               *
+ * Copyright (C) 1995-2021, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
@@ -36,7 +36,9 @@
 
 enum EFileDialogMode {
    kFDOpen,
-   kFDSave
+   kFDSave,
+   kDOpen,
+   kDSave
 };
 
 
@@ -54,21 +56,24 @@ class TGFSComboBox;
 class TGFileInfo {
 
 private:
-   TGFileInfo(const TGFileInfo&);              // not implemented
-   TGFileInfo& operator=(const TGFileInfo&);   // not implemented
+   TGFileInfo(const TGFileInfo&) = delete;
+   TGFileInfo& operator=(const TGFileInfo&) = delete;
 
 public:
-   char         *fFilename;            // selected file name
-   char         *fIniDir;              // on input: initial directory, on output: new directory
-   const char  **fFileTypes;           // file types used to filter selectable files
-   Int_t         fFileTypeIdx;         // selected file type, index in fFileTypes
-   Bool_t        fOverwrite;           // if true overwrite the file with existing name on save
-   Bool_t        fMultipleSelection;   // if true, allow multiple file selection
-   TList        *fFileNamesList;       // list of selected file names
+   char         *fFilename{nullptr};            // selected file name
+   char         *fIniDir{nullptr};              // on input: initial directory, on output: new directory
+   const char  **fFileTypes{nullptr};           // file types used to filter selectable files
+   Int_t         fFileTypeIdx{0};               // selected file type, index in fFileTypes
+   Bool_t        fOverwrite{kFALSE};            // if true overwrite the file with existing name on save
+   Bool_t        fMultipleSelection{kFALSE};    // if true, allow multiple file selection
+   TList        *fFileNamesList{nullptr};       // list of selected file names
 
-   TGFileInfo() : fFilename(0), fIniDir(0), fFileTypes(0), fFileTypeIdx(0),
-                  fOverwrite(kFALSE), fMultipleSelection(0), fFileNamesList(0) { }
+   TGFileInfo() = default;
    ~TGFileInfo();
+
+   void SetFilename(const char *fname);
+   void SetIniDir(const char *inidir);
+   void DeleteFileNamesList();
 
    void SetMultipleSelection(Bool_t option);
 };
@@ -96,14 +101,15 @@ protected:
    TGListView        *fFv;       // file list view
    TGFileContainer   *fFc;       // file list view container (containing the files)
    TGFileInfo        *fFileInfo; // file info passed to this dialog
+   EFileDialogMode    fDlgType;  // the dialog type passed
 
 private:
-   TGFileDialog(const TGFileDialog&);              // not implemented
-   TGFileDialog& operator=(const TGFileDialog&);   // not implemented
+   TGFileDialog(const TGFileDialog&) = delete;
+   TGFileDialog& operator=(const TGFileDialog&) = delete;
 
 public:
-   TGFileDialog(const TGWindow *p = 0, const TGWindow *main = 0,
-                EFileDialogMode dlg_type = kFDOpen, TGFileInfo *file_info = 0);
+   TGFileDialog(const TGWindow *p = nullptr, const TGWindow *main = nullptr,
+                EFileDialogMode dlg_type = kFDOpen, TGFileInfo *file_info = nullptr);
    virtual ~TGFileDialog();
 
    virtual Bool_t ProcessMessage(Long_t msg, Long_t parm1, Long_t parm2);

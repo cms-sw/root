@@ -11,15 +11,17 @@
 
 #include "TROOT.h"
 #include "TTreeFormula.h"
+#include "TList.h"
 #include "TTree.h"
+#include "TBuffer.h"
 #include "TBranch.h"
 #include "TBranchObject.h"
-#include "TFunction.h"
+#include "TBranchElement.h"
 #include "TClonesArray.h"
 #include "TLeafB.h"
 #include "TLeafC.h"
+#include "TLeafElement.h"
 #include "TLeafObject.h"
-#include "TDataMember.h"
 #include "TMethodCall.h"
 #include "TCutG.h"
 #include "TRandom.h"
@@ -27,29 +29,26 @@
 #include "TDataType.h"
 #include "TStreamerInfo.h"
 #include "TStreamerElement.h"
-#include "TBranchElement.h"
-#include "TLeafElement.h"
 #include "TArrayI.h"
 #include "TAxis.h"
 #include "TError.h"
 #include "TVirtualCollectionProxy.h"
 #include "TString.h"
-#include "TTimeStamp.h"
 #include "TMath.h"
 
 #include "TVirtualRefProxy.h"
 #include "TTreeFormulaManager.h"
 #include "TFormLeafInfo.h"
 #include "TMethod.h"
-#include "TBaseClass.h"
 #include "TFormLeafInfoReference.h"
-
+#include "strlcpy.h"
+#include "snprintf.h"
 #include "TEntryList.h"
 
-#include <ctype.h>
-#include <stdio.h>
-#include <math.h>
-#include <stdlib.h>
+#include <cctype>
+#include <cstdio>
+#include <cmath>
+#include <cstdlib>
 #include <typeinfo>
 #include <algorithm>
 
@@ -366,14 +365,18 @@ void TTreeFormula::DefineDimensions(Int_t code, Int_t size,
    }
 
    Int_t vsize = 0;
+   bool scalarindex = false;
 
    if (fIndexes[code][fNdimensions[code]]==-2) {
       TTreeFormula *indexvar = fVarIndexes[code][fNdimensions[code]];
       // ASSERT(indexvar!=0);
       Int_t index_multiplicity = indexvar->GetMultiplicity();
       switch (index_multiplicity) {
-         case -1:
          case  0:
+            scalarindex = true;
+            vsize = 1;
+            break;
+         case -1:
          case  2:
             vsize = indexvar->GetNdata();
             break;
@@ -385,7 +388,7 @@ void TTreeFormula::DefineDimensions(Int_t code, Int_t size,
 
    fCumulSizes[code][fNdimensions[code]] = size;
 
-   if ( fIndexes[code][fNdimensions[code]] < 0 ) {
+   if ( !scalarindex && fIndexes[code][fNdimensions[code]] < 0 ) {
       fManager->UpdateUsedSize(virt_dim, vsize);
    }
 
@@ -1180,6 +1183,12 @@ Int_t TTreeFormula::ParseWithLeaf(TLeaf* leaf, const char* subExpression, Bool_t
                return -1;
             }
          }
+      }
+   } else {
+      // Regular/old TLeaf, there should not be anything afterward ...
+      if (subExpression && subExpression[0]) {
+        Error("ParseWithLeaf", "Found a numerical leaf but the name has trailing characters: \"%s\"", subExpression);
+        return -1;
       }
    }
 
@@ -2606,7 +2615,7 @@ Int_t TTreeFormula::FindLeafForExpression(const char* expression, TLeaf*& leaf, 
 
       // Check for an alias.
       const char *aliasValue = fTree->GetAlias(left);
-      if (aliasValue && strcspn(aliasValue,"[]+*/-%&!=<>|")==strlen(aliasValue)) {
+      if (aliasValue && strcspn(aliasValue,"()[]+*/-%&!=<>|")==strlen(aliasValue)) {
          // First check whether we are using this alias recursively (this would
          // lead to an infinite recursion).
          if (find(aliasUsed.begin(),
@@ -2844,7 +2853,7 @@ Int_t TTreeFormula::DefinedVariable(TString &name, Int_t &action)
          }
 
 
-         if (strcspn(aliasValue,"+*/-%&!=<>|")!=strlen(aliasValue)) {
+         if (strcspn(aliasValue,"()+*/-%&!=<>|")!=strlen(aliasValue)) {
             // If the alias contains an operator, we need to use a nested formula
             // (since DefinedVariable must only add one entry to the operation's list).
 
@@ -2967,14 +2976,12 @@ Int_t TTreeFormula::DefinedVariable(TString &name, Int_t &action)
    TCutG *gcut = (TCutG*)gROOT->GetListOfSpecials()->FindObject(name.Data());
    if (gcut) {
       if (gcut->GetObjectX()) {
-         if(!gcut->GetObjectX()->InheritsFrom(TTreeFormula::Class())) {
-            delete gcut->GetObjectX(); gcut->SetObjectX(0);
-         }
+         if(!gcut->GetObjectX()->InheritsFrom(TTreeFormula::Class()))
+            gcut->SetObjectX(nullptr);
       }
       if (gcut->GetObjectY()) {
-         if(!gcut->GetObjectY()->InheritsFrom(TTreeFormula::Class())) {
-            delete gcut->GetObjectY(); gcut->SetObjectY(0);
-         }
+         if(!gcut->GetObjectY()->InheritsFrom(TTreeFormula::Class()))
+            gcut->SetObjectY(nullptr);
       }
 
       Int_t code = fNcodes;
@@ -3979,6 +3986,10 @@ T TTreeFormula::EvalInstance(Int_t instance, const char *stringStackArg[])
             TCutG *gcut = (TCutG*)fExternalCuts.At(0);
             TTreeFormula *fx = (TTreeFormula *)gcut->GetObjectX();
             TTreeFormula *fy = (TTreeFormula *)gcut->GetObjectY();
+            if (fDidBooleanOptimization) {
+               fx->ResetLoading();
+               fy->ResetLoading();
+            }
             T xcut = fx->EvalInstance<T>(instance);
             T ycut = fy->EvalInstance<T>(instance);
             return gcut->IsInside(xcut,ycut);
@@ -3986,6 +3997,9 @@ T TTreeFormula::EvalInstance(Int_t instance, const char *stringStackArg[])
          case -1: {
             TCutG *gcut = (TCutG*)fExternalCuts.At(0);
             TTreeFormula *fx = (TTreeFormula *)gcut->GetObjectX();
+            if (fDidBooleanOptimization) {
+               fx->ResetLoading();
+            }
             return fx->EvalInstance<T>(instance);
          }
          default: return 0;
@@ -4240,6 +4254,10 @@ T TTreeFormula::EvalInstance(Int_t instance, const char *stringStackArg[])
                   TCutG *gcut = (TCutG*)fExternalCuts.At(code);
                   TTreeFormula *fx = (TTreeFormula *)gcut->GetObjectX();
                   TTreeFormula *fy = (TTreeFormula *)gcut->GetObjectY();
+                  if (fDidBooleanOptimization) {
+                     fx->ResetLoading();
+                     fy->ResetLoading();
+                  }
                   T xcut = fx->EvalInstance<T>(instance);
                   T ycut = fy->EvalInstance<T>(instance);
                   tab[pos++] = gcut->IsInside(xcut,ycut);
@@ -4248,6 +4266,9 @@ T TTreeFormula::EvalInstance(Int_t instance, const char *stringStackArg[])
                case -1: {
                   TCutG *gcut = (TCutG*)fExternalCuts.At(code);
                   TTreeFormula *fx = (TTreeFormula *)gcut->GetObjectX();
+                  if (fDidBooleanOptimization) {
+                     fx->ResetLoading();
+                  }
                   tab[pos++] = fx->EvalInstance<T>(instance);
                   continue;
                }
@@ -4945,6 +4966,16 @@ void TTreeFormula::ResetLoading()
          f->ResetLoading();
       }
    }
+   for (int i=0; i<fExternalCuts.GetSize(); i++) {
+      auto c = dynamic_cast<TCutG*>(fExternalCuts.At(i));
+      if (c) {
+         ((TTreeFormula *)(c->GetObjectX()))->ResetLoading();
+         ((TTreeFormula *)(c->GetObjectY()))->ResetLoading();
+      }
+   }
+   fRealInstanceCache.fInstanceCache = 0;
+   fRealInstanceCache.fLocalIndexCache = 0;
+   fRealInstanceCache.fVirtAccumCache = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -5540,36 +5571,41 @@ Bool_t TTreeFormula::LoadCurrentDim() {
       }
       // However we allow several dimensions that virtually vary via the size of their
       // index variables.  So we have code to recalculate fCumulUsedSizes.
-      Int_t index;
       TFormLeafInfo * info = 0;
       if (fLookupType[i]!=kDirect) {
          info = (TFormLeafInfo *)fDataMembers.At(i);
       }
       for(Int_t k=0, virt_dim=0; k < fNdimensions[i]; k++) {
          if (fIndexes[i][k]<0) {
-            if (fIndexes[i][k]==-2 && fManager->fVirtUsedSizes[virt_dim]<0) {
+            if (info && fIndexes[i][k]==-2 && fVarIndexes[i][k]->GetManager()->GetMultiplicity()==0) {
+               // Index and thus local size provided by a "index variable of size 1"
+               Int_t index = fVarIndexes[i][k]->EvalInstance(0);
+               Int_t index_size = info->GetSize(index);
+               if (fManager->fUsedSizes[virt_dim]==1 || (index_size!=1 && index_size<fManager->fUsedSizes[virt_dim]) )
+                  fManager->fUsedSizes[virt_dim] = index_size;
+            } else if (fIndexes[i][k]==-2 && fManager->fVirtUsedSizes[virt_dim]<0) {
 
                // if fVirtUsedSize[virt_dim] is positive then VarIndexes[i][k]->GetNdata()
                // is always the same and has already been factored in fUsedSize[virt_dim]
-               index = fVarIndexes[i][k]->GetNdata();
-               if (index==1) {
+               Int_t index_size = fVarIndexes[i][k]->GetNdata();
+               if (index_size==1) {
                   // We could either have a variable size array which is currently of size one
                   // or a single element that might or not might not be present (and is currently present!)
                   if (fVarIndexes[i][k]->GetManager()->GetMultiplicity()==1) {
-                     if (index<fManager->fUsedSizes[virt_dim]) fManager->fUsedSizes[virt_dim] = index;
+                     if (index_size<fManager->fUsedSizes[virt_dim]) fManager->fUsedSizes[virt_dim] = index_size;
                   }
 
                } else if (fManager->fUsedSizes[virt_dim]==-fManager->fVirtUsedSizes[virt_dim] ||
-                          index<fManager->fUsedSizes[virt_dim]) {
-                  fManager->fUsedSizes[virt_dim] = index;
+                          index_size<fManager->fUsedSizes[virt_dim]) {
+                  fManager->fUsedSizes[virt_dim] = index_size;
                }
 
             } else if (hasBranchCount2 && info && k==info->GetVarDim()) {
                // NOTE: We assume the indexing of variable sizes on the first index!
                if (fIndexes[i][0]>=0) {
-                  index = info->GetSize(fIndexes[i][0]);
-                  if (fManager->fUsedSizes[virt_dim]==1 || (index!=1 && index<fManager->fUsedSizes[virt_dim]) )
-                     fManager->fUsedSizes[virt_dim] = index;
+                  Int_t index_size = info->GetSize(fIndexes[i][0]);
+                  if (fManager->fUsedSizes[virt_dim]==1 || (index_size!=1 && index_size<fManager->fUsedSizes[virt_dim]) )
+                     fManager->fUsedSizes[virt_dim] = index_size;
                }
             }
             virt_dim++;

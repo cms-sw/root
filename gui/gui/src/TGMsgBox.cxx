@@ -32,9 +32,11 @@
 #include "TGButton.h"
 #include "TGIcon.h"
 #include "TGLabel.h"
+#include "TGPicture.h"
 #include "TList.h"
 #include "KeySymbols.h"
-
+#include "TVirtualX.h"
+#include "strlcpy.h"
 
 ClassImp(TGMsgBox);
 

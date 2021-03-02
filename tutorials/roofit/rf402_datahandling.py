@@ -1,13 +1,12 @@
 ## \file
 ## \ingroup tutorial_roofit
 ## \notebook
-##
 ## Data and categories: tools for manipulation of (un)binned datasets
 ##
 ## \macro_code
 ##
 ## \date February 2018
-## \author Clemens Lange, Wouter Verkerke (C++ version)
+## \authors Clemens Lange, Wouter Verkerke (C++ version)
 
 from __future__ import print_function
 import ROOT
@@ -48,8 +47,9 @@ for i in range(1000):
 
     # We must explicitly refer to x,y, here to pass the values because
     # d is not linked to them (as explained above)
-    print(x, y, c)
-    print(type(x))
+    if i < 3:
+        print(x, y, c)
+        print(type(x))
     d.add(ROOT.RooArgSet(x, y, c))
 
 d.Print("v")

@@ -30,14 +30,16 @@
 //
 // ********************************************************************
 
-//doxygen tag
-/**
-   @defgroup MatrixFunctions Matrix Template Functions
-   @ingroup SMatrixGroup
 
-   These function apply to matrices (and also Matrix expression) and can return a
-   matrix expression of a particular defined type, like in the matrix multiplication or
-   a vector, like in the matrix-vector product or a scalar like in the Similarity vector-matrix product.
+/**
+\defgroup MatrixFunctions Matrix Template Functions
+\ingroup SMatrixGroup
+
+These function apply to matrices (and also Matrix expression) and can return a
+matrix expression of a particular defined type, like in the matrix multiplication or
+a vector, like in the matrix-vector product or a scalar like in the Similarity
+vector-matrix product.
+
 */
 
 #include "Math/BinaryOpPolicy.h"
@@ -437,7 +439,7 @@ public:
   ///
   ~MatrixMulOp() {}
 
-  /// calc $\sum_{j} a_{ik} * b_{kj}$
+  /// calc \f$\sum_{j} a_{ik} * b_{kj}\f$
   inline typename MatrixA::value_type apply(unsigned int i) const {
     return meta_matrix_dot<D-1>::f(lhs_, rhs_, i);
   }

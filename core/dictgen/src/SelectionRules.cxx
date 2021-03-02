@@ -270,52 +270,18 @@ void SelectionRules::Optimize(){
    fClassSelectionRules.remove_if(predicate);
 }
 
-void SelectionRules::SetDeep(bool deep)
-{
-
-   fIsDeep=deep;
-   if (!fIsDeep) return; // the adventure stops here
-   // if no selection rules, nothing to go deep into
-   if (fClassSelectionRules.empty()) return;
-   // Get index of the last selection rule
-   long count = fClassSelectionRules.rbegin()->GetIndex() + 1;
-   // Deep for classes
-   // Loop on rules. If name or pattern exist, add a {pattern,name}* rule to go deep
-   std::string patternString;
-   for (std::list<ClassSelectionRule>::iterator classRuleIt = fClassSelectionRules.begin();
-        classRuleIt != fClassSelectionRules.end(); ++classRuleIt){
-       if (classRuleIt->HasAttributeWithName("pattern") &&
-           classRuleIt->GetAttributeValue("pattern",patternString)){
-          // If the pattern already does not end with *
-          if (patternString.find_last_of("*")!=patternString.size()-1){
-             ClassSelectionRule csr(count++, fInterp);
-             csr.SetAttributeValue("pattern", patternString+"*");
-             csr.SetSelected(BaseSelectionRule::kYes);
-             AddClassSelectionRule(csr);
-          }
-       }
-       if (classRuleIt->HasAttributeWithName("name") &&
-           classRuleIt->GetAttributeValue("name",patternString)){
-           ClassSelectionRule csr(count++, fInterp);
-           csr.SetAttributeValue("pattern", patternString+"*");
-           csr.SetSelected(BaseSelectionRule::kYes);
-           AddClassSelectionRule(csr);
-       }
-    }
-}
-
-const ClassSelectionRule *SelectionRules::IsDeclSelected(const clang::RecordDecl *D) const
+const ClassSelectionRule *SelectionRules::IsDeclSelected(const clang::RecordDecl *D, bool includeTypedefRule) const
 {
    std::string qual_name;
    GetDeclQualName(D,qual_name);
-   return IsClassSelected(D, qual_name);
+   return IsClassSelected(D, qual_name, includeTypedefRule);
 }
 
 const ClassSelectionRule *SelectionRules::IsDeclSelected(const clang::TypedefNameDecl *D) const
 {
    std::string qual_name;
    GetDeclQualName(D,qual_name);
-   return IsClassSelected(D, qual_name);
+   return IsClassSelected(D, qual_name, true);
 }
 
 const ClassSelectionRule *SelectionRules::IsDeclSelected(const clang::NamespaceDecl *D) const
@@ -696,7 +662,7 @@ const ClassSelectionRule *SelectionRules::IsNamespaceSelected(const clang::Decl*
 }
 
 
-const ClassSelectionRule *SelectionRules::IsClassSelected(const clang::Decl* D, const std::string& qual_name) const
+const ClassSelectionRule *SelectionRules::IsClassSelected(const clang::Decl* D, const std::string& qual_name, bool includeTypedefRule) const
 {
    const clang::TagDecl* tagDecl = llvm::dyn_cast<clang::TagDecl> (D); //TagDecl has methods to understand of what kind is the Decl
    const clang::TypedefNameDecl* typeDefNameDecl = llvm::dyn_cast<clang::TypedefNameDecl> (D);
@@ -733,6 +699,8 @@ const ClassSelectionRule *SelectionRules::IsClassSelected(const clang::Decl* D, 
    const ClassSelectionRule* retval = nullptr;
    const clang::NamedDecl* nDecl(llvm::dyn_cast<clang::NamedDecl>(D));
    for(auto& rule : fClassSelectionRules) {
+      if (!includeTypedefRule && rule.IsFromTypedef())
+         continue;
       BaseSelectionRule::EMatchType match = rule.Match(nDecl, qual_name, "", isLinkDefFile);
       if (match != BaseSelectionRule::kNoMatch) {
          // Check if the template must have its arguments manipulated
@@ -1452,15 +1420,10 @@ bool SelectionRules::AreAllSelectionRulesUsed() const {
             continue;
          }
 
-         const char* attrName = nullptr;
+         const char* attrName = "class";
          const char* attrVal = nullptr;
-         if (!file_name_value.empty()) {
-            attrName = "file name";
-            attrVal = file_name_value.c_str();
-         } else {
-            attrName = "class";
-            if (!name.empty()) attrVal = name.c_str();
-         }
+         if (!name.empty()) attrVal = name.c_str();
+
          ROOT::TMetaUtils::Warning(0,"Unused %s rule: %s\n", attrName, attrVal);
       }
    }

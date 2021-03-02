@@ -41,7 +41,8 @@
 
 #include "TFitResultPtr.h"
 
-#include <float.h>
+#include <cfloat>
+#include <string>
 
 class TF1;
 class TH1D;
@@ -51,6 +52,7 @@ class TList;
 class TCollection;
 class TVirtualFFT;
 class TVirtualHistPainter;
+class TRandom;
 
 
 class TH1 : public TNamed, public TAttLine, public TAttFill, public TAttMarker {
@@ -118,7 +120,6 @@ public:
    static Int_t FitOptionsMake(Option_t *option, Foption_t &Foption);
 
 private:
-   Int_t   AxisChoice(Option_t *axis) const;
    void    Build();
 
    TH1(const TH1&);
@@ -130,12 +131,15 @@ protected:
    TH1(const char *name,const char *title,Int_t nbinsx,Double_t xlow,Double_t xup);
    TH1(const char *name,const char *title,Int_t nbinsx,const Float_t *xbins);
    TH1(const char *name,const char *title,Int_t nbinsx,const Double_t *xbins);
+
+   Int_t            AxisChoice(Option_t *axis) const;
    virtual Int_t    BufferFill(Double_t x, Double_t w);
    virtual Bool_t   FindNewAxisLimits(const TAxis* axis, const Double_t point, Double_t& newMin, Double_t &newMax);
    virtual void     SavePrimitiveHelp(std::ostream &out, const char *hname, Option_t *option = "");
    static Bool_t    RecomputeAxisLimits(TAxis& destAxis, const TAxis& anAxis);
    static Bool_t    SameLimitsAndNBins(const TAxis& axis1, const TAxis& axis2);
    Bool_t   IsEmpty() const;
+   UInt_t GetAxisLabelStatus() const;
 
    inline static Double_t AutoP2GetPower2(Double_t x, Bool_t next = kTRUE);
    inline static Int_t AutoP2GetBins(Int_t n);
@@ -217,12 +221,12 @@ public:
    virtual Int_t    Fill(const char *name, Double_t w);
    virtual void     FillN(Int_t ntimes, const Double_t *x, const Double_t *w, Int_t stride=1);
    virtual void     FillN(Int_t, const Double_t *, const Double_t *, const Double_t *, Int_t) {;}
-   virtual void     FillRandom(const char *fname, Int_t ntimes=5000);
-   virtual void     FillRandom(TH1 *h, Int_t ntimes=5000);
+   virtual void     FillRandom(const char *fname, Int_t ntimes=5000, TRandom * rng = nullptr);
+   virtual void     FillRandom(TH1 *h, Int_t ntimes=5000, TRandom * rng = nullptr);
    virtual Int_t    FindBin(Double_t x, Double_t y=0, Double_t z=0);
    virtual Int_t    FindFixBin(Double_t x, Double_t y=0, Double_t z=0) const;
-   virtual Int_t    FindFirstBinAbove(Double_t threshold=0, Int_t axis=1) const;
-   virtual Int_t    FindLastBinAbove (Double_t threshold=0, Int_t axis=1) const;
+   virtual Int_t    FindFirstBinAbove(Double_t threshold=0, Int_t axis=1, Int_t firstBin=1, Int_t lastBin=-1) const;
+   virtual Int_t    FindLastBinAbove (Double_t threshold=0, Int_t axis=1, Int_t firstBin=1, Int_t lastBin=-1) const;
    virtual TObject *FindObject(const char *name) const;
    virtual TObject *FindObject(const TObject *obj) const;
    virtual TFitResultPtr    Fit(const char *formula ,Option_t *option="" ,Option_t *goption="", Double_t xmin=0, Double_t xmax=0); // *MENU*
@@ -300,7 +304,7 @@ public:
    TVirtualHistPainter *GetPainter(Option_t *option="");
 
    virtual Int_t    GetQuantiles(Int_t nprobSum, Double_t *q, const Double_t *probSum=0);
-   virtual Double_t GetRandom() const;
+   virtual Double_t GetRandom(TRandom * rng = nullptr) const;
    virtual void     GetStats(Double_t *stats) const;
    virtual Double_t GetStdDev(Int_t axis=1) const;
    virtual Double_t GetStdDevError(Int_t axis=1) const;
@@ -322,9 +326,9 @@ public:
    virtual Double_t Integral(Option_t *option="") const;
    virtual Double_t Integral(Int_t binx1, Int_t binx2, Option_t *option="") const;
    virtual Double_t IntegralAndError(Int_t binx1, Int_t binx2, Double_t & err, Option_t *option="") const;
-   virtual Double_t Interpolate(Double_t x);
-   virtual Double_t Interpolate(Double_t x, Double_t y);
-   virtual Double_t Interpolate(Double_t x, Double_t y, Double_t z);
+   virtual Double_t Interpolate(Double_t x) const;
+   virtual Double_t Interpolate(Double_t x, Double_t y) const;
+   virtual Double_t Interpolate(Double_t x, Double_t y, Double_t z) const;
            Bool_t   IsBinOverflow(Int_t bin, Int_t axis = 0) const;
            Bool_t   IsBinUnderflow(Int_t bin, Int_t axis = 0) const;
    virtual Bool_t   IsHighlight() const { return TestBit(kIsHighlight); }
@@ -462,7 +466,7 @@ public:
    virtual void     Reset(Option_t *option="");
    virtual void     SetBinsLength(Int_t n=-1);
 
-   ClassDef(TH1C,2)  //1-Dim histograms (one char per channel)
+   ClassDef(TH1C,3)  //1-Dim histograms (one char per channel)
 
    friend  TH1C     operator*(Double_t c1, const TH1C &h1);
    friend  TH1C     operator*(const TH1C &h1, Double_t c1);
@@ -503,7 +507,7 @@ public:
    virtual void     Reset(Option_t *option="");
    virtual void     SetBinsLength(Int_t n=-1);
 
-   ClassDef(TH1S,2)  //1-Dim histograms (one short per channel)
+   ClassDef(TH1S,3)  //1-Dim histograms (one short per channel)
 
    friend  TH1S     operator*(Double_t c1, const TH1S &h1);
    friend  TH1S     operator*(const TH1S &h1, Double_t c1);
@@ -544,7 +548,7 @@ public:
    virtual void     Reset(Option_t *option="");
    virtual void     SetBinsLength(Int_t n=-1);
 
-   ClassDef(TH1I,2)  //1-Dim histograms (one 32 bits integer per channel)
+   ClassDef(TH1I,3)  //1-Dim histograms (one 32 bits integer per channel)
 
    friend  TH1I     operator*(Double_t c1, const TH1I &h1);
    friend  TH1I     operator*(const TH1I &h1, Double_t c1);
@@ -587,7 +591,7 @@ public:
    virtual void     Reset(Option_t *option="");
    virtual void     SetBinsLength(Int_t n=-1);
 
-   ClassDef(TH1F,2)  //1-Dim histograms (one float per channel)
+   ClassDef(TH1F,3)  //1-Dim histograms (one float per channel)
 
    friend  TH1F     operator*(Double_t c1, const TH1F &h1);
    friend  TH1F     operator*(const TH1F &h1, Double_t c1);
@@ -630,7 +634,7 @@ public:
    virtual void     Reset(Option_t *option="");
    virtual void     SetBinsLength(Int_t n=-1);
 
-   ClassDef(TH1D,2)  //1-Dim histograms (one double per channel)
+   ClassDef(TH1D,3)  //1-Dim histograms (one double per channel)
 
    friend  TH1D     operator*(Double_t c1, const TH1D &h1);
    friend  TH1D     operator*(const TH1D &h1, Double_t c1);

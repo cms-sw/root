@@ -43,8 +43,11 @@
 #include "RConfigure.h"
 #include "TGToolTip.h"
 #include "TGButton.h"
-#include "Riostream.h"
 #include "RStipples.h"
+#include "TVirtualX.h"
+#include "snprintf.h"
+
+#include <iostream>
 
 ClassImp(TGedPopup);
 ClassImp(TGedSelect);
@@ -53,7 +56,7 @@ ClassImp(TGedPatternSelector);
 ClassImp(TGedPatternPopup);
 ClassImp(TGedPatternSelect);
 
-TGGC* TGedPatternFrame::fgGC = 0;
+TGGC* TGedPatternFrame::fgGC = nullptr;
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -178,8 +181,17 @@ void TGedPatternFrame::SetFillStyle(TGGC* gc, Style_t fstyle)
             gVirtualX->DeletePixmap(fillPattern);
             fillPattern = 0;
          }
+#ifdef R__WIN32
+         char pattern[32];
+         // invert (flip) gStipples bitmap bits on Windows
+         for (int i=0;i<32;++i)
+            pattern[i] = ~gStipples[stn][i];
+         fillPattern = gVirtualX->CreateBitmap(gClient->GetDefaultRoot()->GetId(),
+                                               (const char *)&pattern, 16, 16);
+#else
          fillPattern = gVirtualX->CreateBitmap(gClient->GetDefaultRoot()->GetId(),
                                                (const char*)gStipples[stn], 16, 16);
+#endif
          gc->SetStipple(fillPattern);
          break;
       default:
@@ -300,10 +312,17 @@ void TGedPopup::PlacePopup(Int_t x, Int_t y, UInt_t w, UInt_t h)
    // Parent is root window for the popup:
    gVirtualX->GetWindowSize(fParent->GetId(), rx, ry, rw, rh);
 
-   if (x < 0) x = 0;
-   if (x + fWidth > rw) x = rw - fWidth;
-   if (y < 0) y = 0;
-   if (y + fHeight > rh) y = rh - fHeight;
+   if (gVirtualX->InheritsFrom("TGWin32")) {
+      if ((x > 0) && ((x + abs(rx) + (Int_t)fWidth) > (Int_t)rw))
+         x = rw - abs(rx) - fWidth;
+      if ((y > 0) && (y + abs(ry) + (Int_t)fHeight > (Int_t)rh))
+         y = rh - fHeight;
+   } else {
+      if (x < 0) x = 0;
+      if (x + fWidth > rw) x = rw - fWidth;
+      if (y < 0) y = 0;
+      if (y + fHeight > rh) y = rh - fHeight;
+   }
 
    MoveResize(x, y, w, h);
    MapSubwindows();

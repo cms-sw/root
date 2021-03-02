@@ -1,14 +1,14 @@
 // @(#)root/r:$Id$
-// Author: Omar Zapata   29/05/2013
-
+// Author: Omar Zapata  Omar.Zapata@cern.ch   29/05/2013
 
 /*************************************************************************
- * Copyright (C) 2013-2014, Omar Andres Zapata Mesa                      *
+ * Copyright (C) 1995-2021, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
  * For the list of contributors see $ROOTSYS/README/CREDITS.             *
  *************************************************************************/
+
 #ifndef ROOT_R_TRInterface
 #define ROOT_R_TRInterface
 
@@ -206,7 +206,7 @@ namespace ROOT {
          The command line arguments are by deafult argc=0 and argv=NULL,
          The verbose mode is by default disabled but you can enable it to show procedures information in stdout/stderr         \note some time can produce so much noise in the output
          \param argc default 0
-         \param args default null
+         \param argv default null
          \param loadRcpp default true
          \param verbose default false
          \param interactive default true
@@ -226,7 +226,7 @@ namespace ROOT {
          /**
          Method to eval R code and you get the result in a reference to TRObject
          \param code R code
-         \param ands reference to TRObject
+         \param ans reference to TRObject
          \return an true or false if the execution was sucessful or not.
          */
          Int_t Eval(const TString &code, TRObject  &ans); // parse line, returns in ans; error code rc

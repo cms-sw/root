@@ -12,17 +12,25 @@
 #include "TClass.h"
 #include "TRandom.h"
 #include "TGeoTube.h"
+#include "TGeoSphere.h"
 #include "TParticle.h"
+#include "TApplication.h"
+#include "TMatrixDSym.h"
+#include "TVector.h"
+#include "TMatrixDEigen.h"
 
 #include <ROOT/REveGeoShape.hxx>
 #include <ROOT/REveScene.hxx>
 #include <ROOT/REveViewer.hxx>
 #include <ROOT/REveElement.hxx>
 #include <ROOT/REveManager.hxx>
+#include <ROOT/REveUtil.hxx>
+#include <ROOT/REveGeoShape.hxx>
 #include <ROOT/REveProjectionManager.hxx>
 #include <ROOT/REveProjectionBases.hxx>
 #include <ROOT/REvePointSet.hxx>
 #include <ROOT/REveJetCone.hxx>
+#include <ROOT/REveTrans.hxx>
 
 #include <ROOT/REveTrack.hxx>
 #include <ROOT/REveTrackPropagator.hxx>
@@ -42,21 +50,18 @@ const Double_t kR_min = 240;
 const Double_t kR_max = 250;
 const Double_t kZ_d   = 300;
 
-const Int_t N_Tracks =   40;
-const Int_t N_Jets   =   20;
 
-
-REX::REvePointSet* getPointSet(int npoints = 2, float s=2, int color=28)
+REX::REvePointSet *getPointSet(int npoints = 2, float s=2, int color=28)
 {
    TRandom &r = *gRandom;
 
-   auto ps = new REX::REvePointSet("fu", npoints);
+   auto ps = new REX::REvePointSet("fu", "", npoints);
 
    for (Int_t i=0; i<npoints; ++i)
        ps->SetNextPoint(r.Uniform(-s,s), r.Uniform(-s,s), r.Uniform(-s,s));
 
    ps->SetMarkerColor(color);
-   ps->SetMarkerSize(3+r.Uniform(1, 2));
+   ps->SetMarkerSize(3+r.Uniform(1, 7));
    ps->SetMarkerStyle(4);
    return ps;
 }
@@ -64,15 +69,20 @@ REX::REvePointSet* getPointSet(int npoints = 2, float s=2, int color=28)
 void addPoints()
 {
    REX::REveElement* event = eveMng->GetEventScene();
-   REX::REveElement* pntHolder = new REX::REveElementList("Hits");
+
+   auto pntHolder = new REX::REveElement("Hits");
+
    auto ps1 = getPointSet(20, 100);
-   ps1->SetElementName("Points_1");
+   ps1->SetName("Points_1");
+   ps1->SetTitle("Points_1 title"); // used as tooltip
+
    pntHolder->AddElement(ps1);
-   /*
+
    auto ps2 = getPointSet(10, 200, 4);
-   ps2->SetElementName("Points_2");
+   ps2->SetName("Points_2");
+   ps2->SetTitle("Points_2 title"); // used as tooltip
    pntHolder->AddElement(ps2);
-   */
+
    event->AddElement(pntHolder);
 }
 
@@ -82,28 +92,32 @@ void addTracks()
 
    REX::REveElement* event = eveMng->GetEventScene();
    auto prop = new REX::REveTrackPropagator();
-   prop->SetMagFieldObj(new REX::REveMagFieldDuo(350, -3.5, 2.0));
+   prop->SetMagFieldObj(new REX::REveMagFieldDuo(350, 3.5, -2.0));
    prop->SetMaxR(300);
    prop->SetMaxZ(600);
    prop->SetMaxOrbs(6);
-   REX::REveElement* trackHolder = new REX::REveElementList("Tracks");
 
-   double v = 0.5;
+   auto trackHolder = new REX::REveElement("Tracks");
+
+   double v = 0.2;
    double m = 5;
 
+   int N_Tracks = 10 + r.Integer(20);
    for (int i = 0; i < N_Tracks; i++)
    {
       TParticle* p = new TParticle();
 
-      int pdg = 11* (r.Integer(2) -1);
+      int pdg = 11 * (r.Integer(2) > 0 ? 1 : -1);
       p->SetPdgCode(pdg);
 
       p->SetProductionVertex(r.Uniform(-v,v), r.Uniform(-v,v), r.Uniform(-v,v), 1);
       p->SetMomentum(r.Uniform(-m,m), r.Uniform(-m,m), r.Uniform(-m,m)*r.Uniform(1, 3), 1);
       auto track = new REX::REveTrack(p, 1, prop);
       track->MakeTrack();
+      if (i % 4 == 3) track->SetLineStyle(2); // enabled dashed style for some tracks
       track->SetMainColor(kBlue);
-      track->SetElementName(Form("RandomTrack_%d",i ));
+      track->SetName(Form("RandomTrack_%d", i));
+      track->SetTitle(Form("RandomTrack_%d title", i)); // used as tooltip
       trackHolder->AddElement(track);
    }
 
@@ -114,12 +128,14 @@ void addJets()
 {
    TRandom &r = *gRandom;
 
-   REX::REveElement* event = eveMng->GetEventScene();
-   auto jetHolder = new REX::REveElementList("Jets");
+   REX::REveElement *event = eveMng->GetEventScene();
+   auto jetHolder = new REX::REveElement("Jets");
 
+   int N_Jets = 5 + r.Integer(5);
    for (int i = 0; i < N_Jets; i++)
    {
-      auto jet = new REX::REveJetCone(Form("Jet_%d",i ));
+      auto jet = new REX::REveJetCone(Form("Jet_%d", i));
+      jet->SetTitle(Form("Jet_%d title", i)); // used as tooltip
       jet->SetCylinder(2*kR_max, 2*kZ_d);
       jet->AddEllipticCone(r.Uniform(-3.5, 3.5), r.Uniform(0, TMath::TwoPi()),
                            r.Uniform(0.02, 0.2), r.Uniform(0.02, 0.3));
@@ -179,7 +195,7 @@ void projectScenes(bool geomp, bool eventp)
 {
    if (geomp)
    {
-      for (auto & ie : eveMng->GetGlobalScene()->RefChildren())
+      for (auto &ie : eveMng->GetGlobalScene()->RefChildren())
       {
          mngRhoPhi->ImportElements(ie, rPhiGeomScene);
          mngRhoZ  ->ImportElements(ie, rhoZGeomScene);
@@ -187,7 +203,7 @@ void projectScenes(bool geomp, bool eventp)
    }
    if (eventp)
    {
-      for (auto & ie : eveMng->GetEventScene()->RefChildren())
+      for (auto &ie : eveMng->GetEventScene()->RefChildren())
       {
          mngRhoPhi->ImportElements(ie, rPhiEventScene);
          mngRhoZ  ->ImportElements(ie, rhoZEventScene);
@@ -205,9 +221,7 @@ void projectScenes(bool geomp, bool eventp)
 
 //==============================================================================
 
-#pragma link C++ class EventManager+;
-
-class EventManager : public REX::REveElementList
+class EventManager : public REX::REveElement
 {
 public:
    EventManager() = default;
@@ -216,25 +230,27 @@ public:
 
    virtual void NextEvent()
    {
-      printf("NEXT EVENT \n");
-
-      REveElement::List_t ev_scenes;
-      ev_scenes.push_back(eveMng->GetEventScene());
-      if (rPhiEventScene)
-         ev_scenes.push_back(rPhiEventScene);
-
-      if (rhoZEventScene)
-         ev_scenes.push_back(rhoZEventScene);
-      eveMng->DestroyElementsOf(ev_scenes);
-
+      eveMng->DisableRedraw();
+      auto scene =  eveMng->GetEventScene();
+      scene->DestroyElements();
       makeEventScene();
-      if (rPhiEventScene || rhoZEventScene)
-         projectScenes(false, true);
-
-      eveMng->BroadcastElementsOf(ev_scenes);
+      for (auto &ie : scene->RefChildren())
+      {
+         if (mngRhoPhi)
+         mngRhoPhi->ImportElements(ie, rPhiEventScene);
+         if (mngRhoZ)
+         mngRhoZ  ->ImportElements(ie, rhoZEventScene);
+      }
+      eveMng->EnableRedraw();
+      eveMng->DoRedraw3D();
    }
 
-   ClassDef(EventManager, 1);
+   virtual void QuitRoot()
+   {
+      printf("Quit ROOT\n");
+      if (gApplication) gApplication->Terminate();
+   }
+
 };
 
 void event_demo()
@@ -247,8 +263,10 @@ void event_demo()
    eveMng = REX::REveManager::Create();
 
    auto eventMng = new EventManager();
-   eventMng->SetElementName("EventManager");
+   eventMng->SetName("EventManager");
    eveMng->GetWorld()->AddElement(eventMng);
+
+   eveMng->GetWorld()->AddCommand("QuitRoot", "sap-icon://log", eventMng, "QuitRoot()");
 
    eveMng->GetWorld()->AddCommand("NextEvent", "sap-icon://step", eventMng, "NextEvent()");
 

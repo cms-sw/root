@@ -24,10 +24,9 @@
 #include "TROOT.h"
 #include "TClonesArray.h"
 #include "TStopwatch.h"
-#include "TFile.h"
-#include "TTree.h"
 #include "TSystem.h"
 #include "TStreamerInfo.h"
+#include "snprintf.h"
 
 #include "TBench.h"
 
@@ -113,6 +112,9 @@ template <class TGen> TBenchData runTest(const char *name, int nevents, int nhit
 
 int main(int argc, char **argv)
 {
+   std::string inclRootSys = ("-I" + TROOT::GetRootSys() + "/test").Data();
+   TROOT::AddExtraInterpreterArgs({inclRootSys});
+
    bool writereferences = false;
    bool memberwise = false;
    bool shortrun = false;

@@ -12,16 +12,13 @@
 #ifndef ROOT_TGDMLParse
 #define ROOT_TGDMLParse
 
-#include "TGeoMatrix.h"
-
-#include "TXMLEngine.h"
-
-#include "TGeoVolume.h"
-
 #include "TFormula.h"
+#include "TXMLEngine.h"
+#include "TGeoMatrix.h"
+#include "TGeoVolume.h"
+#include "TGeoElement.h"
 
 #include <map>
-#include <vector>
 #include <iostream>
 
 class TGDMLMatrix;
@@ -105,21 +102,11 @@ public:
    TXMLEngine* fFileEngine[20]; //array of dom object pointers
    const char* fStartFile; //name of originating file
    const char* fCurrentFile; //current file name being parsed
-   std::string fDefault_lunit = "cm";
-   std::string fDefault_aunit = "deg";
+   std::string fDefault_lunit = "mm";
+   std::string fDefault_aunit = "rad";
 
-   TGDMLParse() { //constructor
-      fWorldName = "";
-      fWorld = 0;
-      fVolID = 0;
-      fFILENO = 0;
-      for (Int_t i=0; i<20; i++) fFileEngine[i] = 0;
-      fStartFile = 0;
-      fCurrentFile = 0;
-   }
-
-   virtual ~TGDMLParse() { //destructor
-   }
+   TGDMLParse();
+   virtual ~TGDMLParse() {}
 
    static TGeoVolume* StartGDML(const char* filename) {
       TGDMLParse* parser = new TGDMLParse;
@@ -128,8 +115,6 @@ public:
    }
 
    TGeoVolume*       GDMLReadFile(const char* filename = "test.gdml");
-   void              SetDefaultROOTUnits() { fDefault_lunit = "cm"; fDefault_aunit = "deg"; }
-   void              SetDefaultG4Units() { fDefault_lunit = "mm"; fDefault_aunit = "rad"; }
 
 private:
 
@@ -177,7 +162,8 @@ private:
    XMLNodePointer_t  Orb(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr);
    XMLNodePointer_t  Xtru(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr);
    XMLNodePointer_t  Reflection(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr);
-   XMLNodePointer_t  Ellipsoid(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr); //not really implemented: just approximation to a TGeoBBox
+   XMLNodePointer_t  Ellipsoid(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr);
+   XMLNodePointer_t  Tessellated(TXMLEngine* gdml, XMLNodePointer_t node, XMLAttrPointer_t attr);
 
    //'structure' section
    XMLNodePointer_t  VolProcess(TXMLEngine* gdml, XMLNodePointer_t node);

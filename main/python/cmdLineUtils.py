@@ -16,6 +16,7 @@
 from contextlib import contextmanager
 import os
 import sys
+from time import sleep
 
 # Support both Python2 and Python3 at the same time
 if sys.version_info.major > 2 :
@@ -75,13 +76,11 @@ def stderrRedirected():
 
 ##
 # redirect output (escape characters during ROOT importation...)
-# The gymnastic with sys argv  is necessary to workaround for ROOT-7577
-argvTmp = sys.argv[:]
-sys.argv = []
 with stdoutRedirected():
     import ROOT
+# Silence Davix warning (see ROOT-7577)
+ROOT.PyConfig.IgnoreCommandLineOptions = True
 ROOT.gROOT.GetVersion()
-sys.argv = argvTmp
 
 import argparse
 import glob
@@ -303,7 +302,7 @@ def joinPathSplit(pathSplit):
     """
     return "/".join(pathSplit)
 
-MANY_OCCURENCE_WARNING = "Same name objects aren't supported: '{0}' of '{1}' won't be processed"
+MANY_OCCURENCE_WARNING = "Several versions of '{0}' are present in '{1}'. Only the most recent will be considered."
 
 def manyOccurenceRemove(pathSplitList,fileName):
     """
@@ -313,7 +312,7 @@ def manyOccurenceRemove(pathSplitList,fileName):
         for n in pathSplitList:
             if pathSplitList.count(n) != 1:
                 logging.warning(MANY_OCCURENCE_WARNING.format(joinPathSplit(n),fileName))
-                while n in pathSplitList: pathSplitList.remove(n)
+                while n in pathSplitList and pathSplitList.count(n) != 1 : pathSplitList.remove(n)
 
 def patternToPathSplitList(fileName,pattern):
     """
@@ -495,8 +494,7 @@ def getSourceDestListOptDict(parser, wildcards = True):
 # Several functions shared by rootcp, rootmv and rootrm
 
 TARGET_ERROR = "target '{0}' is not a directory"
-OMITTING_FILE_ERROR = "omitting file '{0}'"
-OMITTING_DIRECTORY_ERROR = "omitting directory '{0}'"
+OMITTING_ERROR = "omitting {0} '{1}'. Did you forget to specify the -r option for a recursive copy?"
 OVERWRITE_ERROR = "cannot overwrite non-directory '{0}' with directory '{1}'"
 
 def copyRootObject(sourceFile,sourcePathSplit,destFile,destPathSplit,oneSource,recursive,replace):
@@ -517,12 +515,12 @@ def copyRootObject(sourceFile,sourcePathSplit,destFile,destPathSplit,oneSource,r
     # OMITTING_FILE_ERROR or OMITTING_DIRECTORY_ERROR
     if not recursiveOption:
         if sourcePathSplit == []:
-            logging.warning(OMITTING_FILE_ERROR.format( \
-                sourceFile.GetName()))
+            logging.warning(OMITTING_ERROR.format( \
+                "file", sourceFile.GetName()))
             retcode += 1
         elif isDirectory(sourceFile,sourcePathSplit):
             logging.warning(OMITTING_DIRECTORY_ERROR.format( \
-                sourcePathSplit[-1]))
+                "directory", sourcePathSplit[-1]))
             retcode += 1
     # Run copyRootObjectRecursive function with the wish
     # to follow the unix copy behaviour
@@ -730,7 +728,16 @@ REPLACE_HELP = "replace object if already existing"
 
 def _openBrowser(rootFile=None):
     browser = ROOT.TBrowser()
-    _input("Press enter to exit.")
+    if ROOT.gSystem.InheritsFrom('TMacOSXSystem'):
+        print("Press ctrl+c to exit.")
+        try:
+            while True:
+                ROOT.gSystem.ProcessEvents()
+                sleep(0.01)
+        except (KeyboardInterrupt, SystemExit):
+            pass
+    else:
+        _input("Press enter to exit.")
 
 def rootBrowse(fileName=None):
     if fileName:
@@ -966,7 +973,6 @@ def _rootLsPrintLongLs(keyList,indent,treeListing):
             "timeWidth":maxCharTime+2, \
             "nameWidth":maxCharName+2, \
             "titleWidth":1}
-    date = ROOT.Long(0)
     for key in keyList:
         datime = key.GetDatime()
         time = datime.GetTime()

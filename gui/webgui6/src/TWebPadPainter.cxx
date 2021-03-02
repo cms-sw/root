@@ -1,7 +1,7 @@
 // Author:  Sergey Linev, GSI  10/04/2017
 
 /*************************************************************************
- * Copyright (C) 1995-2018, Rene Brun and Fons Rademakers.               *
+ * Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.               *
  * All rights reserved.                                                  *
  *                                                                       *
  * For the licensing terms see $ROOTSYS/LICENSE.                         *
@@ -9,20 +9,22 @@
  *************************************************************************/
 
 #include "TWebPadPainter.h"
-#include "TCanvas.h"
 #include "TError.h"
 #include "TImage.h"
-#include "TROOT.h"
-#include "TMath.h"
-#include "TPad.h"
+#include "TVirtualPad.h"
 #include "TWebCanvas.h"
+#include "TBufferJSON.h"
 
-#include "ROOT/RMakeUnique.hxx"
+#include <ROOT/RMakeUnique.hxx>
+
 
 /** \class TWebPadPainter
-\ingroup gpad
+\ingroup webgui6
+\brief Implement TVirtualPadPainter which abstracts painting operations.
 
-Implement TVirtualPadPainter which abstracts painting operations.
+TWebPadPainter tries to support old Paint methods of the ROOT classes.
+Main classes (like histograms or graphs) should be painted on JavaScript side
+
 */
 
 
@@ -288,3 +290,13 @@ void TWebPadPainter::DrawTextNDC(Double_t  u , Double_t v, const wchar_t * /*tex
       buf[1] = v;
    }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+/// Produce image from WebPadPainter
+
+void TWebPadPainter::SaveImage(TVirtualPad *pad, const char *fileName, Int_t gtype) const
+{
+   if ((gtype == TImage::kPng) || (gtype == TImage::kJpeg))
+      TWebCanvas::ProduceImage(pad->GetCanvas(), fileName);
+}
+

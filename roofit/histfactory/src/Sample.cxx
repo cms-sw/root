@@ -48,6 +48,36 @@ RooStats::HistFactory::Sample::Sample(const Sample& other) :
     }
   }
 
+RooStats::HistFactory::Sample& RooStats::HistFactory::Sample::operator=(const Sample& other)
+{
+  fName = other.fName; fInputFile = other.fInputFile;
+  fHistoName = other.fHistoName; fHistoPath = other.fHistoPath;
+  fChannelName = other.fChannelName;
+
+  fOverallSysList = other.fOverallSysList;
+  fNormFactorList = other.fNormFactorList;
+  fHistoSysList = other.fHistoSysList;
+  fHistoFactorList = other.fHistoFactorList;
+  fShapeSysList = other.fShapeSysList;
+  fShapeFactorList = other.fShapeFactorList;
+
+  fStatError = other.fStatError;
+  fNormalizeByTheory = other.fNormalizeByTheory;
+  fStatErrorActivate = other.fStatErrorActivate;
+  fhNominal = other.fhNominal;
+
+  if (fhCountingHist)
+    delete fhCountingHist;
+
+  if( other.fhCountingHist ) {
+    SetValue( other.fhCountingHist->GetBinContent(1) );
+  } else {
+    fhCountingHist = NULL;
+  }
+
+  return *this;
+}
+
 
 RooStats::HistFactory::Sample::Sample(std::string SampName, std::string SampHistoName, std::string SampInputFile, std::string SampHistoPath) : 
   fName( SampName ),   fInputFile( SampInputFile), 
@@ -66,7 +96,7 @@ RooStats::HistFactory::Sample::~Sample() {
     delete fhCountingHist;
 }
 
-TH1* RooStats::HistFactory::Sample::GetHisto()  {
+const TH1* RooStats::HistFactory::Sample::GetHisto() const {
   TH1* histo = (TH1*) fhNominal.GetObject();
   return histo;
 }
@@ -74,7 +104,7 @@ TH1* RooStats::HistFactory::Sample::GetHisto()  {
 
 void RooStats::HistFactory::Sample::writeToFile( std::string OutputFileName, std::string DirName ) {
 
-  TH1* histNominal = GetHisto();
+  const TH1* histNominal = GetHisto();
   histNominal->Write();
   
   // Set the location of the data
@@ -131,7 +161,7 @@ void RooStats::HistFactory::Sample::SetValue( Double_t val ) {
 
 
 
-void RooStats::HistFactory::Sample::Print( std::ostream& stream ) {
+void RooStats::HistFactory::Sample::Print( std::ostream& stream ) const {
 
 
   stream << "\t \t Name: " << fName
@@ -277,7 +307,6 @@ void RooStats::HistFactory::Sample::PrintXML( std::ofstream& xml ) {
   xml << "    </Sample>" << std::endl;
 
 }
-
 
 
 // Some helper functions

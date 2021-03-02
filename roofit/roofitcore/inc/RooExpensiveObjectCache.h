@@ -16,10 +16,9 @@
 #ifndef ROO_EXPENSIVE_OBJECT_CACHE
 #define ROO_EXPENSIVE_OBJECT_CACHE
 
-#include "Rtypes.h"
+#include "TObject.h"
 #include "RooArgSet.h"
 #include "TString.h"
-#include <list>
 #include <map>
 
 class RooExpensiveObjectCache : public TObject {
@@ -43,8 +42,6 @@ public:
   static RooExpensiveObjectCache& instance() ;
 
   Int_t size() const { return _map.size() ; }
-
-  static void cleanup() ;
 
   void print() const ;
 
@@ -79,8 +76,6 @@ public:
 protected:
 
   Int_t _nextUID ; 
-
-  static RooExpensiveObjectCache* _instance ;  //!
 
   std::map<TString,ExpensiveObject*> _map ;
  

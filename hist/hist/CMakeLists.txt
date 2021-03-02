@@ -1,22 +1,12 @@
+# Copyright (C) 1995-2019, Rene Brun and Fons Rademakers.
+# All rights reserved.
+#
+# For the licensing terms see $ROOTSYS/LICENSE.
+# For the list of contributors see $ROOTSYS/README/CREDITS.
+
 ############################################################################
 # CMakeLists.txt file for building ROOT hist/hist package
 ############################################################################
-
-if(root7)
-  set(HIST_V7_HEADERS
-    ROOT/RAxis.hxx
-    ROOT/RHist.hxx
-    ROOT/RHistBinIter.hxx
-    ROOT/RHistBufferedFill.hxx
-    ROOT/RHistConcurrentFill.hxx
-    ROOT/RHistData.hxx
-    ROOT/RHistImpl.hxx
-    ROOT/RHistUtils.hxx
-    ROOT/RHistView.hxx
-  )
-
-  set(HIST_V7_SOURCES v7/src/RAxis.cxx)
-endif()
 
 ROOT_STANDARD_LIBRARY_PACKAGE(Hist
   HEADERS
@@ -39,9 +29,11 @@ ROOT_STANDARD_LIBRARY_PACKAGE(Hist
     TFitResultPtr.h
     TFormula.h
     TFractionFitter.h
+    THistRange.h
     TGraph2DErrors.h
     TGraph2D.h
     TGraphAsymmErrors.h
+    TGraphMultiErrors.h
     TGraphBentErrors.h
     TGraphDelaunay2D.h
     TGraphDelaunay.h
@@ -93,12 +85,12 @@ ROOT_STANDARD_LIBRARY_PACKAGE(Hist
     TVirtualFitter.h
     TVirtualGraphPainter.h
     TVirtualHistPainter.h
+    TVirtualPaveStats.h
     Math/WrappedMultiTF1.h
     Math/WrappedTF1.h
     v5/TF1Data.h
     v5/TFormula.h
     v5/TFormulaPrimitive.h
-    ${HIST_V7_HEADERS}
   SOURCES
     AnalyticalIntegrals.cxx
     Haxis.cxx
@@ -125,9 +117,11 @@ ROOT_STANDARD_LIBRARY_PACKAGE(Hist
     TFormulaPrimitive_v5.cxx
     TFormula_v5.cxx
     TFractionFitter.cxx
+    THistRange.cxx
     TGraph2D.cxx
     TGraph2DErrors.cxx
     TGraphAsymmErrors.cxx
+    TGraphMultiErrors.cxx
     TGraphBentErrors.cxx
     TGraph.cxx
     TGraphDelaunay2D.cxx
@@ -164,7 +158,6 @@ ROOT_STANDARD_LIBRARY_PACKAGE(Hist
     TVirtualGraphPainter.cxx
     TVirtualHistPainter.cxx
     WrappedTF1.cxx
-    ${HIST_V7_SOURCES}
   DICTIONARY_OPTIONS
     -writeEmptyRootPCM
   DEPENDENCIES
@@ -174,7 +167,3 @@ ROOT_STANDARD_LIBRARY_PACKAGE(Hist
 )
 
 ROOT_ADD_TEST_SUBDIRECTORY(test)
-
-if(root7)
-    ROOT_ADD_TEST_SUBDIRECTORY(v7/test)
-endif()

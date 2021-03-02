@@ -20,6 +20,7 @@
 #include "RooRealProxy.h"
 #include "RooSetProxy.h"
 #include "RooAICRegistry.h"
+#include <list>
 
 class RooRealVar;
 class RooAbsReal;
@@ -27,7 +28,7 @@ class RooDataHist ;
 
 class RooHistPdf : public RooAbsPdf {
 public:
-  RooHistPdf() ; 
+  RooHistPdf() ;
   RooHistPdf(const char *name, const char *title, const RooArgSet& vars, const RooDataHist& dhist, Int_t intOrder=0);
   RooHistPdf(const char *name, const char *title, const RooArgList& pdfObs, const RooArgList& histObs, const RooDataHist& dhist, Int_t intOrder=0);
   RooHistPdf(const RooHistPdf& other, const char* name=0);
@@ -97,8 +98,6 @@ protected:
   RooArgSet         _histObsList ; // List of observables defining dimensions of histogram
   RooSetProxy       _pdfObsList ;  // List of observables mapped onto histogram observables
   RooDataHist*      _dataHist ;  // Unowned pointer to underlying histogram
-  TIterator*         _histObsIter ; //! 
-  TIterator*         _pdfObsIter ; //! 
   mutable RooAICRegistry _codeReg ; //! Auxiliary class keeping tracking of analytical integration code
   Int_t             _intOrder ; // Interpolation order
   Bool_t            _cdfBoundaries ; // Use boundary conditions for CDFs.
