@@ -1434,7 +1434,15 @@ void TGeoManager::CloseGeometry(Option_t *option)
    if (fNLevel<30) fNLevel = 100;
 
 //   BuildIdArray();
-   Voxelize("ALL");
+   if(!opt.Contains("v")) {
+     Voxelize("ALL");
+   } else {
+     TGeoVolume* vol;
+     TIter next(fVolumes);
+     while ((vol = (TGeoVolume*)next())) {
+       vol->SortNodes();
+     }
+   }
    if (fgVerboseLevel>0) Info("CloseGeometry","Building cache...");
    CountLevels();
    for (Int_t i=0; i<nnavigators; i++) {
@@ -1622,9 +1630,7 @@ void TGeoManager::CountLevels()
 //            node->ResetBit(BIT(ibit)); // cannot overwrite old crap for reproducibility
          }
       }
-      if (node->GetVolume()->GetVoxels()) {
-         if (node->GetNdaughters()>maxnodes) maxnodes = node->GetNdaughters();
-      }
+      if (node->GetNdaughters()>maxnodes) maxnodes = node->GetNdaughters();
       if (next.GetLevel()>maxlevel) maxlevel = next.GetLevel();
       if (node->GetVolume()->GetShape()->IsA()==TGeoXtru::Class()) {
          TGeoXtru *xtru = (TGeoXtru*)node->GetVolume()->GetShape();
