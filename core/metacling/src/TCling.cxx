@@ -128,8 +128,11 @@ clang/LLVM technology.
 #include "llvm/Support/FileSystem.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <iostream>
 #include <cassert>
+#include <llvm/Support/Casting.h>
+#include <llvm/Support/Program.h>
 #include <map>
 #include <set>
 #include <stdexcept>
@@ -1119,8 +1122,9 @@ static GlobalModuleIndex *loadGlobalModuleIndex(cling::Interpreter &interp)
          clang::GlobalModuleIndex::UserDefinedInterestingIDs IDs;
 
          struct DefinitionFinder : public RecursiveASTVisitor<DefinitionFinder> {
-            DefinitionFinder(clang::GlobalModuleIndex::UserDefinedInterestingIDs& IDs,
-                             clang::TranslationUnitDecl* TU) : DefinitionIDs(IDs) {
+            DefinitionFinder(clang::GlobalModuleIndex::UserDefinedInterestingIDs &IDs, clang::TranslationUnitDecl *TU)
+               : DefinitionIDs(IDs)
+            {
                TraverseDecl(TU);
             }
             bool VisitNamedDecl(NamedDecl *ND) {
@@ -1136,13 +1140,19 @@ static GlobalModuleIndex *loadGlobalModuleIndex(cling::Interpreter &interp)
                   if (TD->isCompleteDefinition())
                      Register(TD);
                } else if (NamespaceDecl *NSD = llvm::dyn_cast<NamespaceDecl>(ND)) {
+                  if (NSD->isStdNamespace() || NSD->isInStdNamespace() || NSD->isInlineNamespace() ||
+                      NSD->isAnonymousNamespace())
+                     return true;
                   Register(NSD, /*AddSingleEntry=*/ false);
                }
                else if (TypedefNameDecl *TND = dyn_cast<TypedefNameDecl>(ND))
                   Register(TND);
+               else if (isa<FunctionDecl>(ND) && !isa<CXXMethodDecl>(ND))
+                  Register(ND);
                // FIXME: Add the rest...
                return true; // continue decending
             }
+
          private:
             clang::GlobalModuleIndex::UserDefinedInterestingIDs &DefinitionIDs;
             void Register(const NamedDecl* ND, bool AddSingleEntry = true) {
@@ -1169,10 +1179,62 @@ static GlobalModuleIndex *loadGlobalModuleIndex(cling::Interpreter &interp)
                // FIXME: We might end up with many times with the same module.
                // FIXME: We might end up two modules containing a definition.
                // FIXME: What do we do if no definition is found.
-               DefinitionIDs[ND->getName()].push_back(OwningModule->getASTFile());
+               InterestingIDInfo &Info = DefinitionIDs[ND->getName()];
+               Info.FileEntries.push_back(OwningModule->getASTFile());
+
+               if (auto *NSD = dyn_cast<NamespaceDecl>(ND))
+                  Info.setKind(IdentifierDeclKind::Namespace);
+               else
+                  // This is not a namespace.
+                  Info.setKind(IdentifierDeclKind::Other);
             }
          };
          DefinitionFinder defFinder(IDs, CI.getASTContext().getTranslationUnitDecl());
+
+         struct NamespaceDeclarer : public RecursiveASTVisitor<NamespaceDeclarer> {
+            std::string fwds;
+            llvm::SetVector<NamespaceDecl *> Namespaces;
+
+            NamespaceDeclarer(clang::TranslationUnitDecl *TU) { TraverseDecl(TU); }
+            std::string PrintNamespaceOpen(NamespaceDecl *NSD)
+            {
+               std::string result;
+               if (NSD->isInline())
+                  result += "inline ";
+               result += "namespace " + NSD->getNameAsString() + "{";
+               return result;
+            }
+            bool VisitNamespaceDecl(NamespaceDecl *NSD)
+            {
+               if (Namespaces.count(NSD->getCanonicalDecl()))
+                  return true;
+
+               std::vector<NamespaceDecl *> Parents;
+               // NS1::NS2::NS3-> namespace NS1 { namespace NS2 {namespace NS3{}}}
+               for (DeclContext *DC = NSD; DC && !DC->isTranslationUnit(); DC = DC->getParent()) {
+                  if (auto D = dyn_cast<NamespaceDecl>(DC))
+                     Parents.push_back(D);
+               }
+               std::reverse(Parents.begin(), Parents.end());
+
+               for (auto *D : Parents)
+                  fwds += PrintNamespaceOpen(D);
+               fwds += std::string(Parents.size(), '}');
+               fwds += "\n";
+
+               Namespaces.insert(NSD->getCanonicalDecl());
+               for (Decl *D : NSD->decls()) {
+                  if (!isa<NamespaceDecl>(D))
+                     continue;
+                  TraverseDecl(D);
+               }
+               return true;
+            }
+         };
+
+         NamespaceDeclarer NSDeclarer(CI.getASTContext().getTranslationUnitDecl());
+         TString FwdName = TROOT::GetIncludeDir() + "input_line_fwd.h";
+         llvm::sys::writeFileWithEncoding(FwdName.Data(), NSDeclarer.fwds);
 
          llvm::cantFail(GlobalModuleIndex::writeIndex(CI.getFileManager(),
                                                       CI.getPCHContainerReader(),
@@ -1586,6 +1648,9 @@ TCling::TCling(const char *name, const char *title, const char* const argv[])
    // the results in pipes (Savannah #99234).
    static llvm::raw_fd_ostream fMPOuts (STDOUT_FILENO, /*ShouldClose*/false);
    fMetaProcessor = llvm::make_unique<cling::MetaProcessor>(*fInterpreter, fMPOuts);
+
+   if (llvm::sys::fs::exists((TROOT::GetIncludeDir() + "input_line_fwd.h").Data()))
+      fInterpreter->declare(R"(#include "input_line_fwd.h")");
 
    RegisterCxxModules(*fInterpreter);
    RegisterPreIncludedHeaders(*fInterpreter);

@@ -14,15 +14,15 @@
 //===----------------------------------------------------------------------===//
 #ifndef LLVM_CLANG_SERIALIZATION_GLOBALMODULEINDEX_H
 #define LLVM_CLANG_SERIALIZATION_GLOBALMODULEINDEX_H
-
+#include "clang/AST/DeclBase.h"
 #include "llvm/ADT/DenseMap.h"
-#include <llvm/ADT/DenseSet.h>
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/Error.h"
 #include "llvm/ADT/StringSet.h"
+#include "llvm/Support/Error.h"
+#include <llvm/ADT/DenseSet.h>
 #include <memory>
 #include <utility>
 
@@ -49,6 +49,28 @@ using llvm::SmallVectorImpl;
 using llvm::StringRef;
 using llvm::StringSet;
 using serialization::ModuleFile;
+
+enum IdentifierDeclKind : uint8_t {
+  Namespace = 0,
+  Other = 1,
+};
+
+struct DeclKindInfo {
+
+  IdentifierDeclKind Info = IdentifierDeclKind::Other;
+
+  IdentifierDeclKind getKind() const { return Info; }
+
+  void setKind(IdentifierDeclKind Kind) { Info = Kind; }
+};
+
+struct InterestingIdentifiersInfo : public DeclKindInfo {
+  SmallVector<unsigned, 2> ModuleFileIDs;
+};
+
+struct InterestingIDInfo : public DeclKindInfo {
+  SmallVector<const FileEntry *, 2> FileEntries;
+};
 
 /// A global index for a set of module files, providing information about
 /// the identifiers within those module files.
@@ -127,8 +149,7 @@ class GlobalModuleIndex {
   GlobalModuleIndex &operator=(const GlobalModuleIndex &) = delete;
 
 public:
-  using UserDefinedInterestingIDs =
-    llvm::StringMap<llvm::SmallVector<const FileEntry*, 2>>;
+  using UserDefinedInterestingIDs = llvm::StringMap<InterestingIDInfo>;
 
   ~GlobalModuleIndex();
 
@@ -174,9 +195,10 @@ public:
   /// \returns true if the identifier is known to the index, false otherwise.
   bool lookupIdentifier(llvm::StringRef Name, HitSet &Hits);
 
-  typedef llvm::SmallDenseSet<llvm::StringRef, 4> FileNameHitSet;
-  bool lookupIdentifier(StringRef Name, FileNameHitSet &Hits);
+  using FileNameHitSet = llvm::SmallVector<llvm::StringRef, 2>;
 
+  bool lookupIdentifier(StringRef Name, FileNameHitSet &Hits,
+                        bool *IsNamespace);
   /// Note that the given module file has been loaded.
   ///
   /// \returns false if the global module index has information about this

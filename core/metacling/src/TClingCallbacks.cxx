@@ -317,9 +317,18 @@ bool TClingCallbacks::findInGlobalModuleIndex(DeclarationName Name, bool loadFir
    // such as RequireCompleteType and LookupUnqualified to load all.
    GlobalModuleIndex::FileNameHitSet FoundModules;
 
+   bool IsNamespace;
    // Find the modules that reference the identifier.
    // Note that this only finds top-level modules.
-   if (Index->lookupIdentifier(Name.getAsString(), FoundModules)) {
+   if (Index->lookupIdentifier(Name.getAsString(), FoundModules, &IsNamespace)) {
+      // Don't load any modules if it's a top level namespace.
+      if (IsNamespace) {
+         if (gDebug > 2)
+            llvm::errs() << "'" << Name.getAsString() << "' is a namespace,"
+                         << " skip loading its modules\n";
+         return true;
+      }
+
       for (llvm::StringRef FileName : FoundModules) {
          StringRef ModuleName = llvm::sys::path::stem(FileName);
 

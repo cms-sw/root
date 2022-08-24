@@ -73,7 +73,7 @@ class IdentifierIndexReaderTrait {
 public:
   typedef StringRef external_key_type;
   typedef StringRef internal_key_type;
-  typedef SmallVector<unsigned, 2> data_type;
+  typedef InterestingIdentifiersInfo data_type;
   typedef unsigned hash_value_type;
   typedef unsigned offset_type;
 
@@ -109,9 +109,13 @@ public:
     using namespace llvm::support;
 
     data_type Result;
+    auto Kind = static_cast<IdentifierDeclKind>(
+        endian::readNext<uint8_t, little, unaligned>(d));
+    Result.setKind(Kind);
+    DataLen -= 1;
     while (DataLen > 0) {
       unsigned ID = endian::readNext<uint32_t, little, unaligned>(d);
-      Result.push_back(ID);
+      Result.ModuleFileIDs.push_back(ID);
       DataLen -= 4;
     }
 
@@ -329,7 +333,8 @@ bool GlobalModuleIndex::lookupIdentifier(StringRef Name, HitSet &Hits) {
     return false;
   }
 
-  SmallVector<unsigned, 2> ModuleIDs = *Known;
+  SmallVector<unsigned, 2> ModuleIDs =
+      (*Known).ModuleFileIDs; // FIXME: odd syntax
   for (unsigned I = 0, N = ModuleIDs.size(); I != N; ++I) {
     if (ModuleFile *MF = Modules[ModuleIDs[I]].File)
       Hits.insert(MF);
@@ -339,7 +344,8 @@ bool GlobalModuleIndex::lookupIdentifier(StringRef Name, HitSet &Hits) {
   return true;
 }
 
-bool GlobalModuleIndex::lookupIdentifier(StringRef Name, FileNameHitSet &Hits) {
+bool GlobalModuleIndex::lookupIdentifier(StringRef Name, FileNameHitSet &Hits,
+                                         bool *IsNamespace) {
   Hits.clear();
 
   // If there's no identifier index, there is nothing we can do.
@@ -355,10 +361,13 @@ bool GlobalModuleIndex::lookupIdentifier(StringRef Name, FileNameHitSet &Hits) {
     return false;
   }
 
-  SmallVector<unsigned, 2> ModuleIDs = *Known;
+  *IsNamespace = ((*Known).getKind() == IdentifierDeclKind::Namespace);
+
+  SmallVector<unsigned, 2> ModuleIDs =
+      (*Known).ModuleFileIDs; // FIXME: odd syntax
+
   for (unsigned I = 0, N = ModuleIDs.size(); I != N; ++I) {
-    assert(!Modules[ModuleIDs[I]].FileName.empty());
-    Hits.insert(Modules[ModuleIDs[I]].FileName);
+    Hits.emplace_back(Modules[ModuleIDs[I]].FileName);
   }
 
   ++NumIdentifierLookupHits;
@@ -457,7 +466,8 @@ namespace {
 
     /// Mapping from identifiers to the list of module file IDs that
     /// consider this identifier to be interesting.
-    typedef llvm::StringMap<SmallVector<unsigned, 2> > InterestingIdentifierMap;
+    typedef llvm::StringMap<InterestingIdentifiersInfo>
+        InterestingIdentifierMap;
 
     /// A mapping from all interesting identifiers to the set of module
     /// files in which those identifiers are considered interesting.
@@ -484,9 +494,12 @@ namespace {
       if (!ExternalIDs)
         return;
 
-      for (const auto & I : *ExternalIDs)
-        for (const FileEntry * J : I.getValue())
-          InterestingIdentifiers[I.getKey()].push_back(getModuleFileInfo(J).ID);
+      for (const auto &I : *ExternalIDs) {
+        InterestingIdentifiers[I.getKey()].Info = I.getValue().Info;
+        for (const FileEntry *J : I.getValue().FileEntries)
+          InterestingIdentifiers[I.getKey()].ModuleFileIDs.push_back(
+              getModuleFileInfo(J).ID);
+      }
     }
 
     /// Load the contents of the given module file into the builder.
@@ -733,7 +746,7 @@ llvm::Error GlobalModuleIndexBuilder::loadModuleFile(const FileEntry *File,
            D != DEnd; ++D) {
         std::pair<StringRef, bool> Ident = *D;
         if (Ident.second)
-          InterestingIdentifiers[Ident.first].push_back(ID);
+          InterestingIdentifiers[Ident.first].ModuleFileIDs.push_back(ID);
         else
           (void)InterestingIdentifiers[Ident.first];
       }
@@ -759,8 +772,8 @@ class IdentifierIndexWriterTrait {
 public:
   typedef StringRef key_type;
   typedef StringRef key_type_ref;
-  typedef SmallVector<unsigned, 2> data_type;
-  typedef const SmallVector<unsigned, 2> &data_type_ref;
+  typedef InterestingIdentifiersInfo data_type;
+  typedef const InterestingIdentifiersInfo &data_type_ref;
   typedef unsigned hash_value_type;
   typedef unsigned offset_type;
 
@@ -773,7 +786,8 @@ public:
     using namespace llvm::support;
     endian::Writer LE(Out, little);
     unsigned KeyLen = Key.size();
-    unsigned DataLen = Data.size() * 4;
+    unsigned DataLen =
+        sizeof(unsigned char) + Data.ModuleFileIDs.size() * sizeof(unsigned);
     LE.write<uint16_t>(KeyLen);
     LE.write<uint16_t>(DataLen);
     return std::make_pair(KeyLen, DataLen);
@@ -786,8 +800,9 @@ public:
   void EmitData(raw_ostream& Out, key_type_ref Key, data_type_ref Data,
                 unsigned DataLen) {
     using namespace llvm::support;
-    for (unsigned I = 0, N = Data.size(); I != N; ++I)
-      endian::write<uint32_t>(Out, Data[I], little);
+    endian::write<uint8_t>(Out, Data.Info, little);
+    for (const unsigned ModuleFileID : Data.ModuleFileIDs)
+      endian::write<uint32_t>(Out, ModuleFileID, little);
   }
 };
 
