@@ -123,42 +123,6 @@ namespace cling {
     ///
     Interpreter* m_Interpreter;
 
-    /// \brief Retrieve the underlying, canonical, desugared, unqualified type.
-    EStorageType getStorageType() const { return m_StorageType; }
-
-    /// \brief Determine the underlying, canonical, desugared, unqualified type:
-    /// the element of Storage to be used.
-    static EStorageType determineStorageType(clang::QualType QT);
-
-    /// \brief Determine the underlying, canonical, desugared, unqualified type:
-    /// the element of Storage to be used.
-    static constexpr EStorageType determineStorageTypeT(...) {
-      return kManagedAllocation;
-    }
-
-    template <class T, class = typename std::enable_if<std::is_integral<T>::value>::type>
-    static constexpr EStorageType determineStorageTypeT(T*) {
-      return std::is_signed<T>::value
-        ? kSignedIntegerOrEnumerationType
-        : kUnsignedIntegerOrEnumerationType;
-    }
-    static constexpr EStorageType determineStorageTypeT(double*) {
-      return kDoubleType;
-    }
-    static constexpr EStorageType determineStorageTypeT(float*) {
-      return kFloatType;
-    }
-    static constexpr EStorageType determineStorageTypeT(long double*) {
-      return kDoubleType;
-    }
-    template <class T>
-    static constexpr EStorageType determineStorageTypeT(T**) {
-      return kPointerType;
-    }
-    static constexpr EStorageType determineStorageTypeT(void*) {
-      return kUnsupportedType;
-    }
-
     /// \brief Allocate storage as needed by the type.
     void ManagedAllocate();
 
@@ -220,17 +184,11 @@ namespace cling {
     /// \brief Destruct the value; calls ManagedFree() if needed.
     ~Value();
 
-    /// \brief Create a valid but ininitialized Value. After this call the
-    ///   value's storage can be accessed; i.e. calls ManagedAllocate() if
-    ///   needed.
+    /// \brief Create a valid Value with a deduced clang::Type from the argument.
+    /// This is useful when we want to a \c Value with a particular value from
+    /// compiled code.
     template <class T>
-    static Value Create(void* QualTypeAsOpaquePtr, Interpreter& Interp) {
-      EStorageType stType
-        = std::is_reference<T>::value ?
-       determineStorageTypeT((typename std::remove_reference<T>::type**)nullptr)
-        : determineStorageTypeT((T*)nullptr);
-      return Value(QualTypeAsOpaquePtr, Interp, stType);
-    }
+    static Value Create(Interpreter& Interp, T val);
 
     Value& operator =(const Value& other);
     Value& operator =(Value&& other);
@@ -305,6 +263,7 @@ namespace cling {
   template <> void* Value::getAs() const;
 #define X(type, name)                                                   \
   template <> type Value::getAs() const;                                \
+  template <> Value Value::Create(Interpreter& Interp, type val);       \
 
   BUILTIN_TYPES
 
