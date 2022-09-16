@@ -251,6 +251,14 @@ namespace cling {
     return QT.getCanonicalType();
   }
 
+  void Value::AssertTypeMismatch(const char* Type) const {
+    assert(hasBuiltinType() && "Must be a builtin!");
+    const clang::BuiltinType *BT = getType()->castAs<clang::BuiltinType>();
+    clang::PrintingPolicy Policy = getASTContext().getPrintingPolicy();
+    (void) BT; (void) Policy;
+    assert(BT->getName(Policy).equals(Type));
+  }
+
   template <typename T> T convert(clang::QualType QT, Value::Storage& S) {
     QT = getBuiltinCanonicalType(QT);
     assert(QT->isBuiltinType());
