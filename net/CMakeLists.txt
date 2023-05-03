@@ -15,7 +15,7 @@ if(NOT WIN32 AND ssl)
   add_subdirectory(rootd)
 endif()
 
-if(xrootd)
+if(netx)
   add_subdirectory(netx)
 endif()
 
