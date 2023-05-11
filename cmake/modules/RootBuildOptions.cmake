@@ -179,6 +179,7 @@ ROOT_BUILD_OPTION(x11 ON "X11 support")
 ROOT_BUILD_OPTION(xft ON "Xft support (X11 antialiased fonts)")
 ROOT_BUILD_OPTION(xml ON "XML parser interface")
 ROOT_BUILD_OPTION(xrootd ON "Build xrootd file server and its client (if supported)")
+ROOT_BUILD_OPTION(xproofd OFF "Enable LEGACY support for XProofD file server and client (requires XRootD v4 with private-devel)")
 ROOT_BUILD_OPTION(coverage OFF "Test coverage")
 
 option(fail-on-missing "Fail the configure step if a required external package is missing" OFF)
@@ -256,6 +257,7 @@ if(all)
  set(vc_defvalue ON)
  set(vdt_defvalue ON)
  set(veccore_defvalue ON)
+ set(xproofd_defvalue OFF)
 endif()
 
 #--- The 'builtin_all' option swithes ON old the built in options-------------------------------
