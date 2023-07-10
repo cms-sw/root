@@ -414,7 +414,7 @@ Error RTDynamicLibrarySearchGenerator::tryToGenerate(
 /// is called, which in turn may be used to provide lookup across different
 /// IncrementalJIT instances.
 class DelegateGenerator : public DefinitionGenerator {
-  using LookupFunc = std::function<Expected<JITEvaluatedSymbol>(StringRef)>;
+  using LookupFunc = std::function<Expected<llvm::orc::ExecutorAddr>(StringRef)>;
   LookupFunc lookup;
 
 public:
@@ -426,7 +426,9 @@ public:
     SymbolMap Symbols;
     for (auto& KV : LookupSet) {
       if (auto Addr = lookup(*KV.first))
-        Symbols[KV.first] = Addr.get();
+        Symbols[KV.first] = JITEvaluatedSymbol(
+            Addr->getValue(),
+            JITSymbolFlags::Exported);
     }
     if (Symbols.empty())
       return Error::success();
@@ -772,7 +774,7 @@ void* IncrementalJIT::getSymbolAddress(StringRef Name, bool IncludeHostSymbols){
   if (!IncludeHostSymbols)
     insertInfo = m_ForbidDlSymbols.insert(Name);
 
-  Expected<JITEvaluatedSymbol> Symbol = Jit->lookup(Name);
+  Expected<llvm::orc::ExecutorAddr> Symbol = Jit->lookup(Name);
 
   // If m_ForbidDlSymbols already contained Name before we tried to insert it
   // then some calling frame has added it and will remove it later because its
@@ -787,7 +789,7 @@ void* IncrementalJIT::getSymbolAddress(StringRef Name, bool IncludeHostSymbols){
     return nullptr;
   }
 
-  return jitTargetAddressToPointer<void*>(Symbol->getAddress());
+  return jitTargetAddressToPointer<void*>(Symbol->getValue());
 }
 
 bool IncrementalJIT::doesSymbolAlreadyExist(StringRef UnmangledName) {
