@@ -2662,6 +2662,7 @@ Bool_t PyROOT::Pythonize( PyObject* pyclass, const std::string& name )
 
       // Re-inject here too, since TDirectoryFile redefines GetObject
       Utility::AddToClass(pyclass, "GetObject", (PyCFunction)TDirectoryGetObject);
+      Utility::AddToClass( pyclass, "__getitem__", (PyCFunction) TDirectoryGetObject, METH_O );
 
       return kTRUE;
    }
@@ -2747,7 +2748,7 @@ Bool_t PyROOT::Pythonize( PyObject* pyclass, const std::string& name )
       Py_XDECREF( attr );
 
    // allow member-style access to entries in file
-      Utility::AddToClass( pyclass, "__getattr__", (PyCFunction) TFileGetAttr, METH_O );
+      Utility::AddToClass( pyclass, "__getitem__", (PyCFunction) TFileGetAttr, METH_O );
    }
 
    else if ( name.substr(0,8) == "TVector3" ) {
