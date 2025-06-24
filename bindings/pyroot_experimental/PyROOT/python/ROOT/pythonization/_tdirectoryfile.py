@@ -17,9 +17,9 @@ from ROOT import pythonization
 # only their key name is available (we think that the getattr(myDir, myKeyName) is
 # a bit more awkward than myDir.Get("myKeyName"))
 
-# TDirectoryFile::Get method, based on the attr syntax
+# TDirectoryFile::Get method, based on the item-getting syntax (__getitem__)
 def _TDirectoryFile_Get(self, objName):
-    return getattr(self, objName)
+    return self[objName]
 
 # Pythonizor function
 @pythonization()
